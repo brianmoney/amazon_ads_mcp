@@ -62,6 +62,77 @@ async def test_build_registers_health_route(builder):
 
 
 @pytest.mark.asyncio
+async def test_build_runs_sp_setup_before_stripping_schemas(monkeypatch):
+    fake_auth_manager = SimpleNamespace(provider=None)
+
+    monkeypatch.setattr(
+        "amazon_ads_mcp.server.server_builder.get_auth_manager",
+        lambda: fake_auth_manager,
+    )
+
+    builder = ServerBuilder()
+    calls = []
+
+    async def record_default_identity():
+        calls.append("default_identity")
+
+    async def record_create_server():
+        calls.append("create_server")
+        return SimpleNamespace()
+
+    async def record_middleware():
+        calls.append("middleware")
+
+    async def record_http_client():
+        calls.append("http_client")
+        return SimpleNamespace()
+
+    async def record_builtin_tools():
+        calls.append("builtin_tools")
+
+    async def record_sp_tools():
+        calls.append("sp_tools")
+
+    async def record_strip_schemas():
+        calls.append("strip_output_schemas")
+
+    async def record_prompts():
+        calls.append("builtin_prompts")
+
+    async def record_oauth_callback():
+        calls.append("oauth_callback")
+
+    async def record_health_check():
+        calls.append("health_check")
+
+    monkeypatch.setattr(builder, "_setup_default_identity", record_default_identity)
+    monkeypatch.setattr(builder, "_create_main_server", record_create_server)
+    monkeypatch.setattr(builder, "_setup_middleware", record_middleware)
+    monkeypatch.setattr(builder, "_setup_http_client", record_http_client)
+    monkeypatch.setattr(builder, "_setup_builtin_tools", record_builtin_tools)
+    monkeypatch.setattr(builder, "_setup_sp_tools", record_sp_tools)
+    monkeypatch.setattr(builder, "_strip_output_schemas", record_strip_schemas)
+    monkeypatch.setattr(builder, "_setup_builtin_prompts", record_prompts)
+    monkeypatch.setattr(builder, "_setup_oauth_callback", record_oauth_callback)
+    monkeypatch.setattr(builder, "_setup_health_check", record_health_check)
+
+    await builder.build()
+
+    assert calls == [
+        "default_identity",
+        "create_server",
+        "middleware",
+        "http_client",
+        "builtin_tools",
+        "sp_tools",
+        "strip_output_schemas",
+        "builtin_prompts",
+        "oauth_callback",
+        "health_check",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_health_route_reports_package_version(monkeypatch):
     routes = []
     fake_auth_manager = SimpleNamespace(provider=None)

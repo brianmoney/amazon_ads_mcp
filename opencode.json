@@ -1,0 +1,8 @@
+{
+  "permission": {
+    "bash": {
+      "git add *": "allow",
+      "git commit *": "allow"
+    }
+  }
+}
