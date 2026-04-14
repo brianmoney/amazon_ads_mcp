@@ -1,6 +1,6 @@
 """Register built-in tools for the MCP server.
 
-Handle registration of identity, profile, region, download, sampling, and
+Handle registration of identity, profile, region, sampling, and
 authentication tools depending on the active provider.
 
 Examples
@@ -19,23 +19,16 @@ Examples
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Optional
 
 from fastmcp import Context, FastMCP
-
-from fastmcp.dependencies import Progress
 
 from ..auth.manager import get_auth_manager
 from ..config.settings import settings
 from ..models.builtin_responses import (
     ClearProfileResponse,
-    DownloadedFile,
-    DownloadExportResponse,
-    EnableToolGroupResponse,
-    GetDownloadUrlResponse,
     GetProfileResponse,
     GetRegionResponse,
-    ListDownloadsResponse,
     ListRegionsResponse,
     ProfileSelectorResponse,
     ProfilePageResponse,
@@ -46,8 +39,6 @@ from ..models.builtin_responses import (
     SamplingTestResponse,
     SetProfileResponse,
     SetRegionResponse,
-    ToolGroupInfo,
-    ToolGroupsResponse,
 )
 from ..tools import identity, profile, profile_listing, region
 from ..tools.oauth import OAuthTools
@@ -226,7 +217,11 @@ async def register_profile_tools(server: FastMCP):
 
                 # Find the profile name for the response
                 selected_profile = next(
-                    (p for p in profiles_data if str(p.get("profileId")) == selected_id),
+                    (
+                        p
+                        for p in profiles_data
+                        if str(p.get("profileId")) == selected_id
+                    ),
                     None,
                 )
                 profile_name = (
@@ -373,7 +368,9 @@ async def register_region_tools(server: FastMCP):
 
         # Apply sandbox host replacement (same pattern used in http_client.py)
         if settings.amazon_ads_sandbox_mode:
-            default_host = default_host.replace("advertising-api", "advertising-api-test")
+            default_host = default_host.replace(
+                "advertising-api", "advertising-api-test"
+            )
 
         return RoutingStateResponse(
             region=result.get("region", current_region),
@@ -387,215 +384,6 @@ async def register_region_tools(server: FastMCP):
 
 
 # Routing override tools removed - use the main region/marketplace tools instead
-
-
-async def register_download_tools(server: FastMCP):
-    """Register download management tools.
-
-    :param server: FastMCP server instance
-    :type server: FastMCP
-    """
-
-    # Background task with progress reporting for long-running downloads
-    # task=True is inherited from server-wide tasks=True setting
-    @server.tool(
-        name="download_export",
-        description="Download a completed export to local storage (supports background execution)",
-    )
-    async def download_export_tool(
-        ctx: Context,
-        export_id: str,
-        export_url: str,
-        progress: Progress = Progress(),  # Inject progress tracker
-    ) -> DownloadExportResponse:
-        """Download a completed export to local storage.
-
-        This tool supports background execution with progress reporting.
-        When called with task=True by the client, it returns immediately
-        with a task ID while the download continues in the background.
-        """
-        import base64
-
-        from ..utils.export_download_handler import get_download_handler
-
-        # Report progress: starting download
-        await progress.set_total(3)  # 3 steps: parse, download, complete
-        await progress.set_message("Parsing export metadata...")
-        await progress.increment()
-
-        handler = get_download_handler()
-
-        # Get active profile for scoped storage
-        auth_mgr = get_auth_manager()
-        profile_id = auth_mgr.get_active_profile_id() if auth_mgr else None
-
-        # Determine export type from ID
-        try:
-            padded = export_id + "=" * (4 - len(export_id) % 4)
-            decoded = base64.b64decode(padded).decode("utf-8")
-            if "," in decoded:
-                _, suffix = decoded.rsplit(",", 1)
-                type_map = {
-                    "C": "campaigns",
-                    "A": "adgroups",
-                    "AD": "ads",
-                    "T": "targets",
-                }
-                export_type = type_map.get(suffix.upper(), "general")
-            else:
-                export_type = "general"
-        except (AttributeError, TypeError, ValueError):
-            export_type = "general"
-
-        # Report progress: downloading
-        await progress.set_message(f"Downloading {export_type} export...")
-        await progress.increment()
-
-        file_path = await handler.download_export(
-            export_url=export_url,
-            export_id=export_id,
-            export_type=export_type,
-            profile_id=profile_id,
-        )
-
-        # Report progress: complete
-        await progress.set_message("Download complete!")
-        await progress.increment()
-
-        return DownloadExportResponse(
-            success=True,
-            file_path=str(file_path),
-            export_type=export_type,
-            message=f"Export downloaded to {file_path}",
-        )
-
-    @server.tool(
-        name="list_downloads",
-        description="List all downloaded exports and reports for the active profile",
-    )
-    async def list_downloads_tool(
-        ctx: Context, resource_type: Optional[str] = None
-    ) -> ListDownloadsResponse:
-        """List downloaded files for the active profile."""
-        from ..tools.download_tools import list_downloaded_files
-
-        # Get active profile for scoped listing
-        auth_mgr = get_auth_manager()
-        profile_id = auth_mgr.get_active_profile_id() if auth_mgr else None
-
-        result = await list_downloaded_files(resource_type, profile_id=profile_id)
-
-        # Transform flat file list into DownloadedFile objects
-        files = []
-        for f in result.get("files", []):
-            # Extract resource_type from path (e.g., "exports/campaigns/file.json")
-            path_parts = f.get("path", "").split("/")
-            rtype = path_parts[0] if path_parts else "unknown"
-
-            files.append(
-                DownloadedFile(
-                    filename=f.get("name", ""),
-                    path=f.get("path", ""),
-                    size=f.get("size", 0),
-                    modified=f.get("modified", ""),
-                    resource_type=rtype,
-                )
-            )
-
-        return ListDownloadsResponse(
-            success=True,
-            files=files,
-            count=result.get("total_files", len(files)),
-            download_dir=result.get("base_directory", ""),
-        )
-
-    @server.tool(
-        name="get_download_url",
-        description="""Get the HTTP URL for downloading a file.
-
-Use with list_downloads to find available files, then get their download URLs.
-The URL can be opened in a browser or used with curl/wget to download the file.
-
-Note: Requires HTTP transport (not stdio).
-""",
-    )
-    async def get_download_url_tool(
-        ctx: Context,
-        file_path: str,
-    ) -> GetDownloadUrlResponse:
-        """Generate the download URL for a file.
-
-        :param ctx: MCP context
-        :param file_path: Relative path from list_downloads output
-        :return: Response with download URL
-        """
-        from pathlib import Path
-        from urllib.parse import quote
-
-        # Try to get HTTP request context
-        try:
-            from fastmcp.server.dependencies import get_http_request
-
-            request = get_http_request()
-        except (ImportError, RuntimeError):
-            return GetDownloadUrlResponse(
-                success=False,
-                error="HTTP transport required for file downloads",
-                hint="Run server with --transport http",
-            )
-
-        # Get current profile
-        auth_mgr = get_auth_manager()
-        profile_id = auth_mgr.get_active_profile_id() if auth_mgr else None
-
-        if not profile_id:
-            return GetDownloadUrlResponse(
-                success=False,
-                error="No active profile",
-                hint="Set active profile before getting download URLs",
-            )
-
-        # Validate file exists
-        from ..utils.export_download_handler import get_download_handler
-
-        handler = get_download_handler()
-        profile_dir = handler.base_dir / "profiles" / profile_id
-        full_path = profile_dir / file_path
-
-        if not full_path.exists():
-            return GetDownloadUrlResponse(
-                success=False,
-                error="File not found",
-                hint="Use list_downloads to see available files",
-            )
-
-        # Build URL with proper encoding
-        base_url = str(request.base_url).rstrip("/")
-
-        # Handle forwarded headers from reverse proxy
-        forwarded_proto = request.headers.get("X-Forwarded-Proto")
-        forwarded_host = request.headers.get("X-Forwarded-Host")
-        if forwarded_proto and forwarded_host:
-            base_url = f"{forwarded_proto}://{forwarded_host}"
-
-        # URL-encode path segments
-        encoded_path = "/".join(
-            quote(part, safe="") for part in Path(file_path).parts
-        )
-
-        download_url = f"{base_url}/downloads/{encoded_path}"
-        return GetDownloadUrlResponse(
-            success=True,
-            download_url=download_url,
-            file_name=full_path.name,
-            size_bytes=full_path.stat().st_size,
-            profile_id=profile_id,
-            instructions=(
-                f"Use HTTP GET to download: curl -O '{download_url}'. "
-                "If authentication is enabled, add header: "
-                "Authorization: Bearer <token>"
-            ),
-        )
 
 
 async def register_sampling_tools(server: FastMCP):
@@ -651,7 +439,10 @@ async def register_sampling_tools(server: FastMCP):
             error_msg = str(e).lower()
 
             # Check if it's a "client doesn't support sampling" error
-            if "does not support sampling" in error_msg or "sampling not supported" in error_msg:
+            if (
+                "does not support sampling" in error_msg
+                or "sampling not supported" in error_msg
+            ):
                 # Try server-side fallback if enabled
                 if settings.enable_sampling:
                     try:
@@ -664,7 +455,9 @@ async def register_sampling_tools(server: FastMCP):
                             temperature=0.7,
                             max_tokens=100,
                         )
-                        response_text = result.text if hasattr(result, "text") else str(result)
+                        response_text = (
+                            result.text if hasattr(result, "text") else str(result)
+                        )
 
                         return SamplingTestResponse(
                             success=True,
@@ -745,140 +538,16 @@ async def register_oauth_tools_builtin(server: FastMCP):
 # Removed diagnostic tools - not core operations
 
 
-async def register_tool_group_tools(
-    server: FastMCP,
-    mounted_servers: Dict[str, list],
-    group_tool_counts: Optional[Dict[str, int]] = None,
-):
-    """Register progressive tool disclosure tools.
-
-    These tools let MCP clients discover and selectively enable API tool
-    groups, keeping the initial ``tools/list`` response minimal.
-
-    :param server: FastMCP server instance.
-    :param mounted_servers: Map of prefix -> list of sub-servers for mounted groups.
-    :param group_tool_counts: Pre-counted total tools per group (including disabled).
-    """
-    _tool_counts = group_tool_counts or {}
-
-    @server.tool(
-        name="list_tool_groups",
-        description=(
-            "List available API tool groups. "
-            "Groups are disabled by default; use enable_tool_group to activate."
-        ),
-    )
-    async def list_tool_groups_tool(ctx: Context) -> ToolGroupsResponse:
-        """List available tool groups with enable/disable status."""
-        groups = []
-        total = 0
-        enabled_count = 0
-
-        for prefix, sub_servers in mounted_servers.items():
-            # Total count from pre-stored values (includes disabled tools)
-            count = _tool_counts.get(prefix, 0)
-            active = 0
-            for sub in sub_servers:
-                visible = await sub.list_tools()
-                active += len(visible)
-            # Fall back to active count if no pre-stored total
-            if count == 0 and active > 0:
-                count = active
-            groups.append(
-                ToolGroupInfo(
-                    prefix=prefix,
-                    tool_count=count,
-                    enabled=active > 0,
-                )
-            )
-            total += count
-            enabled_count += active
-
-        return ToolGroupsResponse(
-            success=True,
-            groups=groups,
-            total_tools=total,
-            enabled_tools=enabled_count,
-            message=(
-                f"{len(groups)} groups, {enabled_count}/{total} tools enabled. "
-                "Use enable_tool_group(prefix) to activate a group."
-            ),
-        )
-
-    @server.tool(
-        name="enable_tool_group",
-        description=(
-            "Enable or disable an API tool group by prefix. "
-            "Call list_tool_groups first to see available groups."
-        ),
-    )
-    async def enable_tool_group_tool(
-        ctx: Context,
-        prefix: str,
-        enable: bool = True,
-    ) -> EnableToolGroupResponse:
-        """Enable or disable a tool group.
-
-        :param prefix: Tool group prefix (e.g., 'cm', 'dsp').
-        :param enable: True to enable, False to disable.
-        """
-        if prefix not in mounted_servers:
-            available = ", ".join(sorted(mounted_servers.keys()))
-            return EnableToolGroupResponse(
-                success=False,
-                prefix=prefix,
-                error=f"Unknown group '{prefix}'. Available: {available}",
-            )
-
-        affected = 0
-        tool_names: list[str] = []
-        for sub in mounted_servers[prefix]:
-            if enable:
-                # Enable first, then list to get visible tools
-                sub.enable(components={"tool"})
-                tools = await sub.list_tools()
-            else:
-                # List while visible, then disable
-                tools = await sub.list_tools()
-                sub.disable(components={"tool"})
-            tool_names.extend(f"{prefix}_{t.name}" for t in tools)
-            affected += len(tools)
-
-        action = "enabled" if enable else "disabled"
-        return EnableToolGroupResponse(
-            success=True,
-            prefix=prefix,
-            enabled=enable,
-            tool_count=affected,
-            tool_names=sorted(tool_names),
-            message=f"{action.capitalize()} {affected} tools in group '{prefix}'.",
-        )
-
-    logger.info(
-        "Registered tool group tools (%d groups)", len(mounted_servers)
-    )
-
-
-async def register_all_builtin_tools(
-    server: FastMCP,
-    mounted_servers: Optional[Dict[str, FastMCP]] = None,
-    group_tool_counts: Optional[Dict[str, int]] = None,
-    skip_tool_groups: bool = False,
-):
+async def register_all_builtin_tools(server: FastMCP):
     """Register all built-in tools with the server.
 
     :param server: FastMCP server instance.
-    :param mounted_servers: Optional map of prefix -> sub-server for tool groups.
-    :param group_tool_counts: Pre-counted total tools per group (including disabled).
-    :param skip_tool_groups: If True, skip registering list_tool_groups/enable_tool_group.
-        Used when code mode is active (GetTags replaces progressive disclosure).
     """
     # Register common tools that work for all auth types
     await register_profile_tools(server)
     await register_profile_listing_tools(server)
     await register_region_tools(server)
     # Routing tools removed - override functionality was redundant
-    await register_download_tools(server)
     await register_sampling_tools(server)
     # Cache & diagnostic tools removed - not core operations
 
@@ -895,12 +564,5 @@ async def register_all_builtin_tools(
                 # OpenBridge identity management tools
                 await register_identity_tools(server)
                 logger.info("Registered OpenBridge identity tools")
-
-    # Register tool group tools for progressive disclosure
-    # Skipped when code mode is active (GetTags serves the same browsing purpose)
-    if mounted_servers and not skip_tool_groups:
-        await register_tool_group_tools(
-            server, mounted_servers, group_tool_counts=group_tool_counts
-        )
 
     logger.info("Registered all built-in tools")

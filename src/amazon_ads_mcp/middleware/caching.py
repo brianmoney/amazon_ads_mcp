@@ -49,8 +49,6 @@ logger = logging.getLogger(__name__)
 SAFE_TO_CACHE_TOOLS: Set[str] = {
     # Region configuration - static server data
     "list_regions",
-    # Downloads - local filesystem, not API-dependent
-    "list_downloads",
 }
 
 # Tools that MUST NOT be cached (profile-dependent, write operations, or dynamic)
@@ -72,12 +70,8 @@ NEVER_CACHE_TOOLS: Set[str] = {
     "check_oauth_status",
     "refresh_oauth_token",
     "clear_oauth_tokens",
-    # Download operations - side effects
-    "download_export",
     # Sampling - dynamic operations
     "test_sampling",
-    # ALL OpenAPI-generated tools - profile-dependent API responses
-    # These are excluded by whitelist (not in SAFE_TO_CACHE_TOOLS)
 }
 
 # TTL values in seconds

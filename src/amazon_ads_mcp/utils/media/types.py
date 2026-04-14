@@ -1,19 +1,8 @@
-"""Media type registry and resolution for OpenAPI specifications.
-
-This module provides functionality for managing and resolving media types
-from OpenAPI specifications and sidecar files. It includes a registry
-class that can build media type mappings from OpenAPI specs and resolve
-content types for specific HTTP methods and URL paths.
-
-The module handles both request and response media types, supports
-templated paths, and provides caching for performance optimization.
-"""
+"""Media type registry and resolution helpers."""
 
 import re
 from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
-
-from amazon_ads_mcp.utils.openapi import deref, oai_template_to_regex
 
 
 class MediaTypeRegistry:
@@ -58,48 +47,18 @@ class MediaTypeRegistry:
         self._bulk_loading = False
         self._cache.clear()
 
-    def add_from_spec(self, spec: dict) -> None:
-        """Add media type mappings from an OpenAPI specification.
-
-        Extracts request and response media types from the provided
-        OpenAPI specification and adds them to the registry. Clears
-        the internal cache to ensure fresh lookups (deferred during
-        bulk loading).
-
-        :param spec: OpenAPI specification dictionary
-        :type spec: dict
-        """
-        req_map, resp_map = build_media_maps_from_spec(spec)
+    def add_entries(
+        self,
+        request_media: Dict[Tuple[str, str], str],
+        response_media: Dict[Tuple[str, str], List[str]],
+    ) -> None:
+        """Add precomputed media type mappings to the registry."""
+        req_map = dict(request_media)
+        resp_map = {key: list(values) for key, values in response_media.items()}
         self._req_entries.append(req_map)
         self._resp_entries.append(resp_map)
         if not self._bulk_loading:
             self._cache.clear()
-
-    def add_from_sidecar(self, sidecar: dict) -> None:
-        """Add media type mappings from a sidecar configuration file.
-
-        Processes sidecar configuration to extract request and response
-        media type mappings. The sidecar should contain 'requests' and
-        'responses' sections with method+path keys and media type values.
-
-        :param sidecar: Sidecar configuration dictionary
-        :type sidecar: dict
-        """
-        req_map: Dict[Tuple[str, str], str] = {}
-        resp_map: Dict[Tuple[str, str], List[str]] = {}
-        for k, v in (sidecar.get("requests") or {}).items():
-            m, p = split_method_path_key(k)
-            if m and p and isinstance(v, str):
-                req_map[(m, p)] = v
-        for k, v in (sidecar.get("responses") or {}).items():
-            m, p = split_method_path_key(k)
-            if m and p and isinstance(v, list):
-                resp_map[(m, p)] = list(v)
-        if req_map or resp_map:
-            self._req_entries.append(req_map)
-            self._resp_entries.append(resp_map)
-            if not self._bulk_loading:
-                self._cache.clear()
 
     def resolve(
         self, method: str, url: str
@@ -133,7 +92,7 @@ class MediaTypeRegistry:
             for mm, templated in keys:
                 if mm != m:
                     continue
-                if re.match(oai_template_to_regex(templated), path):
+                if re.match(_oai_template_to_regex(templated), path):
                     result = (
                         req_map.get((mm, templated)),
                         resp_map.get((mm, templated)),
@@ -145,76 +104,15 @@ class MediaTypeRegistry:
         return result
 
 
-def split_method_path_key(key: str) -> Tuple[Optional[str], Optional[str]]:
-    """Split a method+path key into separate method and path components.
-
-    Parses keys in the format "METHOD /path" (e.g., "GET /users/{id}")
-    and returns the method and path as separate components. Handles
-    path normalization including leading slash addition and trailing
-    slash removal.
-
-    :param key: Method+path key string (e.g., "POST /api/users")
-    :type key: str
-    :return: Tuple of (method, path) or (None, None) if parsing fails
-    :rtype: Tuple[Optional[str], Optional[str]]
-    """
-    parts = (key or "").strip().split(" ", 1)
-    if len(parts) != 2:
-        return None, None
-    method = parts[0].lower()
-    path = parts[1].strip()
-    if not path.startswith("/"):
-        path = "/" + path
-    path = path.rstrip("/") or "/"
-    return method, path
-
-
-def build_media_maps_from_spec(
-    openapi_spec: dict,
-) -> Tuple[Dict[Tuple[str, str], str], Dict[Tuple[str, str], List[str]]]:
-    """Build media type mappings from an OpenAPI specification.
-
-    Extracts request and response media types from the OpenAPI spec's
-    paths section. For each operation, it identifies the content types
-    for request bodies and response content, building comprehensive
-    mappings keyed by method and path.
-
-    :param openapi_spec: OpenAPI specification dictionary
-    :type openapi_spec: dict
-    :return: Tuple of (request_media_map, response_media_map)
-    :rtype: Tuple[Dict[Tuple[str, str], str], Dict[Tuple[str, str], List[str]]]
-    """
-    req_media: Dict[Tuple[str, str], str] = {}
-    resp_media: Dict[Tuple[str, str], List[str]] = {}
-    paths = openapi_spec.get("paths", {}) or {}
-    for raw_path, ops in paths.items():
-        if not isinstance(ops, dict):
-            continue
-        norm_path = (raw_path or "/").rstrip("/") or "/"
-        for method, op in ops.items():
-            if not isinstance(op, dict):
-                continue
-            m = method.lower()
-            rb = deref(openapi_spec, op.get("requestBody"))
-            rb_content = (rb or {}).get("content", {}) if isinstance(rb, dict) else {}
-            if isinstance(rb_content, dict) and rb_content:
-                ct = sorted(rb_content.keys())[0]
-                req_media[(m, norm_path)] = ct
-            responses = (op.get("responses") or {}) if isinstance(op, dict) else {}
-            accepts: Set[str] = set()
-            if isinstance(responses, dict):
-                for _, r in responses.items():
-                    r = deref(openapi_spec, r)
-                    rc = (r or {}).get("content", {}) if isinstance(r, dict) else {}
-                    if isinstance(rc, dict):
-                        accepts.update(rc.keys())
-            if accepts:
-                resp_media[(m, norm_path)] = sorted(accepts)
-    return req_media, resp_media
+def _oai_template_to_regex(path_template: str) -> str:
+    """Convert an OpenAPI path template to a regular expression."""
+    if not path_template:
+        return r"^/$"
+    escaped = re.escape(path_template)
+    escaped = re.sub(r"\\\{[^{}]+\\\}", r"[^/]+", escaped)
+    return rf"^{escaped.rstrip('/') or '/'}$"
 
 
 __all__ = [
     "MediaTypeRegistry",
-    "split_method_path_key",
-    "build_media_maps_from_spec",
 ]

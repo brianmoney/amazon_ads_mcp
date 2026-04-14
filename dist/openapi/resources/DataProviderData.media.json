@@ -1,7 +1,0 @@
-{
-  "version": "1.0",
-  "namespace": "DataProviderData",
-  "content_types": [
-    "application/json"
-  ]
-}

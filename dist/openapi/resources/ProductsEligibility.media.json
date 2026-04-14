@@ -1,8 +1,0 @@
-{
-  "version": "1.0",
-  "namespace": "ProductsEligibility",
-  "content_types": [
-    "application/json",
-    "application/vnd.programeligibility.v2+json"
-  ]
-}
