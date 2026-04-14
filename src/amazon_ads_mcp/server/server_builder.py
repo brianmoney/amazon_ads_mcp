@@ -61,7 +61,10 @@ class ServerBuilder:
         # Setup built-in tools
         await self._setup_builtin_tools()
 
-        # Strip outputSchema from all tools (saves ~3K tokens)
+        # Setup Sponsored Products tools
+        await self._setup_sp_tools()
+
+        # Strip outputSchema from all registered tools (saves ~3K tokens)
         await self._strip_output_schemas()
 
         # Setup built-in prompts
@@ -247,6 +250,12 @@ class ServerBuilder:
 
         await register_all_builtin_tools(self.server)
 
+    async def _setup_sp_tools(self):
+        """Setup Sponsored Products tools for the server."""
+        from ..tools.sp import register_all_sp_tools
+
+        await register_all_sp_tools(self.server)
+
     async def _strip_output_schemas(self):
         """Strip outputSchema from all registered tools.
 
@@ -257,8 +266,7 @@ class ServerBuilder:
 
         This method nulls out ``output_schema`` on every tool registered
         on the main server, saving ~3K tokens for typical builtin tool
-        sets.  OpenAPI-derived tools already have response schemas
-        stripped by Phase 2 (``_strip_response_bodies``).
+        sets.
         """
         tools = await self.server.list_tools()
         stripped = 0
@@ -269,7 +277,7 @@ class ServerBuilder:
                     tool.output_schema = None
                     stripped += 1
             except Exception:
-                # Skip tools that can't be accessed (e.g. mounted)
+                # Skip tool entries that cannot be resolved by name.
                 pass
 
         if stripped:
