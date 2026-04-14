@@ -158,12 +158,6 @@ class Settings(BaseSettings):
         "INFO", description="Logging level"
     )
 
-    # FastMCP Configuration
-    fastmcp_use_experimental_parser: bool = Field(
-        True,
-        description="Enable FastMCP experimental OpenAPI parser for better performance",
-    )
-
     # OAuth Configuration (optional, for web-based authentication flows)
     oauth_client_id: Optional[str] = Field(
         None,
@@ -198,59 +192,11 @@ class Settings(BaseSettings):
         description="Default sampling rate (0.0-1.0)",
     )
 
-    # Code Mode Configuration
-    code_mode_enabled: bool = Field(
-        False,
-        alias="CODE_MODE",
-        description="Enable code mode (replaces tool catalog with meta-tools)",
-    )
-    code_mode_include_tags: bool = Field(
-        True,
-        alias="CODE_MODE_INCLUDE_TAGS",
-        description="Include tags browsing in code mode discovery (default true)",
-    )
-    code_mode_max_duration_secs: int = Field(
-        30,
-        alias="CODE_MODE_MAX_DURATION_SECS",
-        description="Sandbox execution timeout in seconds",
-    )
-    code_mode_max_memory: int = Field(
-        50_000_000,
-        alias="CODE_MODE_MAX_MEMORY",
-        description="Sandbox memory limit in bytes (default 50MB)",
-    )
-
-    # Background Tasks Configuration
-    enable_tasks: bool = Field(
-        True,
-        alias="ENABLE_TASKS",
-        description="Enable background task execution for long-running tools",
-    )
-
     # Response Caching Configuration
     enable_response_caching: bool = Field(
         False,
         alias="ENABLE_RESPONSE_CACHING",
         description="Enable response caching for safe read-only tools",
-    )
-
-    # File Download Configuration
-    download_auth_token: Optional[str] = Field(
-        None,
-        validation_alias=AliasChoices(
-            "AMAZON_ADS_DOWNLOAD_AUTH_TOKEN", "DOWNLOAD_AUTH_TOKEN"
-        ),
-        description="Bearer token for authenticating download requests (optional)",
-    )
-    download_max_file_size: int = Field(
-        512 * 1024 * 1024,  # 512MB default
-        alias="AMAZON_ADS_DOWNLOAD_MAX_FILE_SIZE",
-        description="Maximum file size in bytes for downloads (default 512MB)",
-    )
-    download_allowed_extensions: Optional[str] = Field(
-        None,
-        alias="AMAZON_ADS_DOWNLOAD_ALLOWED_EXTENSIONS",
-        description="Comma-separated list of allowed file extensions (e.g., '.json,.csv,.gz')",
     )
 
     @field_validator("auth_method")

@@ -1,13 +1,7 @@
-"""Server builder module for creating configured MCP servers.
-
-This module handles the complex server initialization process,
-including middleware setup, client configuration, and resource mounting.
-"""
+"""Server builder module for creating a utility-only MCP server."""
 
 import logging
-import os
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 from fastmcp import FastMCP
 from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
@@ -28,19 +22,12 @@ from ..utils.header_resolver import HeaderNameResolver
 from ..utils.http_client import AuthenticatedClient
 from ..utils.media import MediaTypeRegistry
 from ..utils.region_config import RegionConfig
-from .openapi_utils import slim_openapi_for_tools
-from .sidecar_loader import _json_load as json_load
 
 logger = logging.getLogger(__name__)
 
 
-
 class ServerBuilder:
-    """Builder class for creating configured MCP servers.
-
-    This class encapsulates the complex server setup process,
-    making it easier to test and maintain.
-    """
+    """Builder class for creating configured MCP servers."""
 
     def __init__(self, lifespan=None):
         """Initialize the server builder.
@@ -55,23 +42,9 @@ class ServerBuilder:
         self.auth_manager = get_auth_manager()
         self.media_registry = MediaTypeRegistry()
         self.header_resolver = HeaderNameResolver()
-        self.mounted_servers: Dict[str, List[FastMCP]] = {}
-        self.group_tool_counts: Dict[str, int] = {}
 
     async def build(self) -> FastMCP:
-        """Build and configure the MCP server.
-
-        :return: Configured FastMCP server instance
-        :rtype: FastMCP
-        """
-        code_mode = settings.code_mode_enabled
-
-        # Warn if both code mode and progressive disclosure are set
-        if code_mode and self._progressive_disclosure_enabled():
-            logger.warning(
-                "Both CODE_MODE and PROGRESSIVE_TOOL_DISCLOSURE are set. "
-                "Code mode supersedes progressive disclosure; tool groups will be skipped."
-            )
+        """Build and configure the MCP server."""
 
         # Ensure default identity is loaded if configured
         await self._setup_default_identity()
@@ -85,39 +58,17 @@ class ServerBuilder:
         # Setup HTTP client
         self.client = await self._setup_http_client()
 
-        # Mount resource servers
-        await self._mount_resource_servers()
-
-        # Progressive disclosure: disable mounted tools by default
-        # Skipped when code mode is active (tools must stay visible for CodeMode catalog)
-        if not code_mode:
-            await self._disable_mounted_tools()
-
-        # Setup built-in tools (skip tool group tools when code mode active)
-        await self._setup_builtin_tools(skip_tool_groups=code_mode)
+        # Setup built-in tools
+        await self._setup_builtin_tools()
 
         # Strip outputSchema from all tools (saves ~3K tokens)
-        # Only affects output_schema; input schemas used by GetSchemas are preserved
         await self._strip_output_schemas()
-
-        # Enrich async tool descriptions with polling hints
-        from .async_hints_transform import AsyncHintsTransform
-
-        self.server.add_transform(AsyncHintsTransform())
-
-        # Code mode: tag tools by category then apply CodeMode transform
-        if code_mode:
-            await self._tag_tools_for_code_mode()
-            await self._apply_code_mode()
 
         # Setup built-in prompts
         await self._setup_builtin_prompts()
 
         # Setup OAuth callback route for HTTP transport
         await self._setup_oauth_callback()
-
-        # Setup file download routes for HTTP transport
-        await self._setup_file_routes()
 
         # Setup health check endpoint for container orchestration
         await self._setup_health_check()
@@ -143,7 +94,6 @@ class ServerBuilder:
             "Amazon Ads MCP Server",
             version=__version__,
             lifespan=self.lifespan,
-            tasks=settings.enable_tasks,
         )
 
         # Setup server-side sampling handler if enabled
@@ -291,393 +241,11 @@ class ServerBuilder:
             ),
         )
 
-    async def _mount_resource_servers(self):
-        """Mount resource servers for API isolation."""
-
-        # Always prefer dist/ directory if it exists (minified specs)
-        dist_resources = Path("dist/openapi/resources")
-        source_resources = Path("openapi/resources")
-        packaged_resources = Path(__file__).resolve().parent.parent / "resources"
-
-        if dist_resources.exists():
-            resources_dir = dist_resources
-            logger.info(f"Using optimized resources from {resources_dir}")
-        elif source_resources.exists():
-            resources_dir = source_resources
-            logger.info(f"Using source resources from {resources_dir}")
-        elif packaged_resources.exists():
-            resources_dir = packaged_resources
-            logger.info(f"Using packaged resources from {resources_dir}")
-        else:
-            logger.warning("No resources directory found")
-            return
-
-        # Load namespace mapping and package allowlist (if any)
-        namespace_mapping = await self._load_namespace_mapping(resources_dir)
-        package_allowlist = await self._load_package_allowlist(resources_dir)
-
-        # Defer media registry cache invalidation until all specs are mounted
-        self.media_registry.begin_bulk_load()
-
-        # Process each resource file
-        skip_files = {"packages.json", "manifest.json"}
-        for spec_path in sorted(resources_dir.glob("*.json")):
-            # Skip metadata files and sidecars
-            if spec_path.name in skip_files:
-                logger.debug(f"Skipping metadata file: {spec_path.name}")
-                continue
-
-            # Skip sidecar files (check suffix, not substring)
-            if spec_path.stem.endswith((".media", ".manifest", ".transform")):
-                logger.debug(f"Skipping sidecar file: {spec_path.name}")
-                continue
-
-            # Skip if not in package allowlist (when set)
-            ns = spec_path.stem
-            if package_allowlist:
-                if ns not in package_allowlist:
-                    logger.debug(
-                        "Skipping %s - not in AMAZON_AD_API_PACKAGES allowlist",
-                        ns,
-                    )
-                    continue
-
-            await self._mount_single_resource(spec_path, namespace_mapping)
-
-        # All specs mounted — flush the deferred cache invalidation
-        self.media_registry.end_bulk_load()
-
-    async def _load_namespace_mapping(self, resources_dir: Path) -> Dict[str, str]:
-        """Load namespace to prefix mapping from packages.json.
-
-        :return: Namespace to prefix mapping
-        :rtype: Dict[str, str]
-        """
-        # Try multiple locations for packages.json: alongside resources or project root
-        candidates = [
-            resources_dir.parent / "packages.json",
-            resources_dir / "packages.json",
-            Path("openapi/packages.json"),
-        ]
-        packages_path = next((p for p in candidates if p.exists()), None)
-        if not packages_path:
-            return {}
-
-        try:
-            data = json_load(packages_path)
-            mapping: Dict[str, str] = {}
-
-            # Preferred: explicit prefixes map
-            prefixes = data.get("prefixes") if isinstance(data, dict) else None
-            if isinstance(prefixes, dict):
-                for ns, pref in prefixes.items():
-                    if isinstance(ns, str) and isinstance(pref, str):
-                        mapping[ns] = pref
-
-            # Back-compat: some generators might emit a flat map with {ns: {prefix: "..."}}
-            if not mapping:
-                for ns, info in data.items() if isinstance(data, dict) else []:
-                    if (
-                        isinstance(info, dict)
-                        and "prefix" in info
-                        and isinstance(info["prefix"], str)
-                    ):
-                        mapping[ns] = info["prefix"]
-
-            return mapping
-        except Exception as e:
-            logger.error(f"Failed to load packages.json: {e}")
-            return {}
-
-    async def _load_package_allowlist(
-        self, resources_dir: Path
-    ) -> Dict[str, None] | set:
-        """Load allowed packages from environment and resolve to resource namespaces.
-
-        Supports aliases defined in packages.json. Returns a set of allowed
-        resource namespaces (matching the .json stem names). Empty set means
-        no restriction.
-        """
-        # Load packages.json to resolve aliases -> namespaces and read defaults
-        candidates = [
-            resources_dir.parent / "packages.json",
-            resources_dir / "packages.json",
-            Path("openapi/packages.json"),
-        ]
-        packages_path = next((p for p in candidates if p.exists()), None)
-
-        alias_map: Dict[str, str] = {}
-        default_tokens: list[str] = []
-        if packages_path:
-            try:
-                data = json_load(packages_path)
-                # `aliases` is a map: alias_slug -> NamespaceName
-                aliases = data.get("aliases") if isinstance(data, dict) else None
-                if isinstance(aliases, dict):
-                    for alias, ns in aliases.items():
-                        if isinstance(alias, str) and isinstance(ns, str):
-                            alias_map[alias.lower()] = ns
-                # Optional defaults list (aliases or namespace stems)
-                defaults_val = data.get("defaults") if isinstance(data, dict) else None
-                if isinstance(defaults_val, list):
-                    default_tokens = [str(v).strip().lower() for v in defaults_val if str(v).strip()]
-            except Exception as e:
-                logger.debug("Failed to read aliases/defaults from %s: %s", packages_path, e)
-
-        # Determine requested tokens from env or defaults
-        raw = os.getenv("AMAZON_AD_API_PACKAGES") or os.getenv("AD_API_PACKAGES")
-        requested: set[str]
-        if raw:
-            raw = raw.strip()
-            # Strip surrounding quotes if present (Windows compatibility)
-            if (raw.startswith('"') and raw.endswith('"')) or (raw.startswith("'") and raw.endswith("'")):
-                logger.debug("Stripping quotes from AMAZON_AD_API_PACKAGES value")
-                raw = raw[1:-1]
-            requested = {part.strip().lower() for part in raw.split(",") if part.strip()}
-            logger.debug("Parsed AMAZON_AD_API_PACKAGES: %s", requested)
-        else:
-            # Use packages.json defaults when available; otherwise fall back to a safe minimal set
-            fallback_defaults = ["profiles", "accounts-ads-accounts"]
-            requested = set(default_tokens or fallback_defaults)
-            logger.info("Using default package allowlist: %s", ", ".join(sorted(requested)))
-
-        if not requested:
-            # If we somehow ended up empty, do not restrict
-            return set()
-
-        # Build allowlist: map requested tokens using alias_map when possible.
-        allow: set[str] = set()
-        for token in requested:
-            # Exact alias -> namespace
-            if token in alias_map:
-                allow.add(alias_map[token])
-                continue
-            # Accept tokens that are already namespace (file stem) names
-            # Attempt case-insensitive match against available specs
-            for spec_path in resources_dir.glob("*.json"):
-                stem = spec_path.stem
-                if stem.endswith((".media", ".manifest", ".transform")):
-                    continue
-                if spec_path.name in {"packages.json", "manifest.json"}:
-                    continue
-                if stem.lower() == token:
-                    allow.add(stem)
-
-        if allow:
-            logger.info(
-                "Package allowlist active (%d): %s",
-                len(allow),
-                ", ".join(sorted(allow)),
-            )
-        else:
-            logger.warning(
-                "No packages resolved from requested tokens; loading nothing.")
-        return allow
-
-    async def _mount_single_resource(
-        self, spec_path: Path, namespace_mapping: Dict[str, str]
-    ):
-        """Mount a single resource server.
-
-        :param spec_path: Path to the OpenAPI spec
-        :type spec_path: Path
-        :param namespace_mapping: Namespace to prefix mapping
-        :type namespace_mapping: Dict[str, str]
-        """
-        try:
-            # Load the spec
-            spec = json_load(spec_path)
-
-            # Validate it's an OpenAPI spec
-            if not isinstance(spec, dict) or "openapi" not in spec:
-                logger.warning(f"Skipping {spec_path.name} - not an OpenAPI spec")
-                return
-
-            # Determine namespace and prefix first (before using it)
-            namespace = spec_path.stem
-
-            # Populate registries from spec (media types and headers)
-            self.media_registry.add_from_spec(spec)
-            self.header_resolver.add_from_spec(spec)
-
-            # Load and apply media type sidecar if it exists
-            media_path = spec_path.with_suffix(".media.json")
-            if media_path.exists():
-                try:
-                    media_spec = json_load(media_path)
-                    self.media_registry.add_from_spec(media_spec)
-                    logger.debug(f"Loaded media types from {media_path.name}")
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to load media sidecar {media_path.name}: {e}"
-                    )
-
-            # Slim the spec
-            slim_openapi_for_tools(spec)
-
-            # Auth-aware server URL configuration
-            if self.auth_manager and hasattr(
-                self.auth_manager.provider, "provider_type"
-            ):
-                provider_type = self.auth_manager.provider.provider_type
-
-                if provider_type == "openbridge":
-                    # For OpenBridge: Don't hardcode a regional server
-                    # Runtime routing will override based on identity
-                    spec["servers"] = [
-                        {
-                            "url": RegionConfig.get_api_endpoint("na"),
-                            "description": "Runtime routing will override based on identity",
-                        }
-                    ]
-                    logger.debug(
-                        f"OpenBridge: Spec {namespace} servers will be overridden at runtime"
-                    )
-                else:
-                    # For Direct auth: use configured region
-                    region = settings.amazon_ads_region
-                    # Use centralized region config
-                    base_url = RegionConfig.get_api_endpoint(region)
-                    spec["servers"] = [{"url": base_url}]
-                    logger.debug(f"Direct auth: Spec {namespace} using {region} server")
-            else:
-                # Fallback to settings region
-                region = settings.amazon_ads_region
-                # Use centralized region config
-                base_url = RegionConfig.get_api_endpoint(region)
-                spec["servers"] = [{"url": base_url}]
-
-            # Get prefix from mapping
-            prefix = namespace_mapping.get(namespace, namespace)
-
-            # Create sub-server from OpenAPI spec
-            # HTTP client already has 60s read timeout configured
-            sub_server = FastMCP.from_openapi(
-                openapi_spec=spec,
-                client=self.client,
-                name=prefix,
-            )
-
-            # Mount the sub-server with namespace (v3: prefix → namespace)
-            self.server.mount(server=sub_server, namespace=prefix)
-            self.mounted_servers.setdefault(prefix, []).append(sub_server)
-
-            # Track tool count for progressive disclosure totals
-            tools = await sub_server.list_tools()
-            self.group_tool_counts[prefix] = (
-                self.group_tool_counts.get(prefix, 0) + len(tools)
-            )
-
-            # Apply sidecars (transforms) to the mounted sub-server
-            from .sidecar_loader import apply_sidecars
-
-            await apply_sidecars(sub_server, spec_path)
-
-            logger.info(f"Mounted {namespace} with prefix '{prefix}'")
-
-        except Exception as e:
-            logger.error(f"Failed to mount {spec_path}: {e}")
-
-    def _progressive_disclosure_enabled(self) -> bool:
-        """Check if progressive tool disclosure is enabled via env flag.
-
-        Defaults to **off** because Claude Desktop (and most MCP clients)
-        do not re-fetch ``tools/list`` mid-conversation after receiving a
-        ``tools/list_changed`` notification.  Enable for clients that do.
-        """
-        val = os.getenv("PROGRESSIVE_TOOL_DISCLOSURE", "false").lower()
-        return val in ("1", "true", "yes")
-
-    async def _disable_mounted_tools(self):
-        """Disable all mounted OpenAPI tools for progressive disclosure.
-
-        When progressive disclosure is active, OpenAPI-derived tools start
-        hidden.  Users call ``enable_tool_group(prefix)`` to reveal them.
-        This keeps the initial ``tools/list`` response minimal.
-        """
-        if not self._progressive_disclosure_enabled():
-            logger.info("Progressive tool disclosure disabled; all tools visible")
-            return
-
-        total_disabled = 0
-        for prefix, sub_servers in self.mounted_servers.items():
-            group_count = self.group_tool_counts.get(prefix, 0)
-            for sub_server in sub_servers:
-                sub_server.disable(components={"tool"})
-            total_disabled += group_count
-            logger.debug(
-                "Disabled %d tools in group '%s'", group_count, prefix
-            )
-
-        logger.info(
-            "Progressive disclosure: disabled %d tools across %d groups",
-            total_disabled,
-            len(self.mounted_servers),
-        )
-
-    async def _setup_builtin_tools(self, skip_tool_groups: bool = False):
-        """Setup built-in tools for the server.
-
-        :param skip_tool_groups: If True, skip registering tool group tools
-            (list_tool_groups / enable_tool_group). Used when code mode is active
-            since GetTags replaces progressive disclosure browsing.
-        """
+    async def _setup_builtin_tools(self):
+        """Setup built-in tools for the server."""
         from ..server.builtin_tools import register_all_builtin_tools
 
-        await register_all_builtin_tools(
-            self.server,
-            mounted_servers=self.mounted_servers,
-            group_tool_counts=self.group_tool_counts,
-            skip_tool_groups=skip_tool_groups,
-        )
-
-    async def _tag_tools_for_code_mode(self):
-        """Tag all tools with human-readable categories for code mode discovery.
-
-        OpenAPI tools are tagged by namespace prefix (e.g. ``cm`` -> ``campaign-management``).
-        Builtin tools are tagged as ``server-management``.
-        Must run before ``_apply_code_mode()`` so CodeMode's GetTags sees the tags.
-        """
-        from .code_mode import tag_builtin_tools, tag_tools_by_prefix
-
-        api_count = await tag_tools_by_prefix(self.server, self.mounted_servers)
-        builtin_count = await tag_builtin_tools(self.server)
-        logger.info(
-            "Code mode tagging complete: %d API tools + %d builtin tools",
-            api_count,
-            builtin_count,
-        )
-
-    async def _apply_code_mode(self):
-        """Apply CodeMode transform to replace tools with meta-tools.
-
-        Code Mode replaces all upstream tools with meta-tools (discovery + execute)
-        that let the LLM discover and invoke tools on-demand via sandboxed Python.
-
-        Token reduction: 98.4% for 55+ tools (34,971 -> 547 tokens).
-
-        :raises ImportError: If ``fastmcp[code-mode]`` extra is not installed
-        """
-        from .code_mode import create_code_mode_transform
-
-        try:
-            transform = create_code_mode_transform()
-            self.server.add_transform(transform)
-
-            tools = await self.server.list_tools()
-            tool_names = [t.name for t in tools]
-            logger.info(
-                "Code mode active: %d meta-tools exposed (%s). "
-                "Original tools accessible via execute.",
-                len(tools),
-                ", ".join(tool_names),
-            )
-        except ImportError:
-            logger.error(
-                "Code mode requires the 'code-mode' extra. "
-                "Install with: pip install 'fastmcp[code-mode]>=3.1.0'"
-            )
-            raise
+        await register_all_builtin_tools(self.server)
 
     async def _strip_output_schemas(self):
         """Strip outputSchema from all registered tools.
@@ -912,16 +480,6 @@ class ServerBuilder:
 
             logger.info("Registered OAuth callback route at /auth/callback")
 
-    async def _setup_file_routes(self):
-        """Setup HTTP file download routes.
-
-        Registers custom routes for downloading files via HTTP.
-        Only effective with HTTP transport (not stdio).
-        """
-        from .file_routes import register_file_routes
-
-        register_file_routes(self.server)
-
     async def _setup_health_check(self):
         """Register /health endpoint for container orchestration.
 
@@ -940,6 +498,6 @@ class ServerBuilder:
                 {
                     "status": "healthy",
                     "service": "amazon-ads-mcp",
-                    "version": "1.0.0",
+                    "version": __version__,
                 }
             )

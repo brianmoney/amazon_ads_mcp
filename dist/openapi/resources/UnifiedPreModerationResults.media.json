@@ -1,7 +1,0 @@
-{
-  "version": "1.0",
-  "namespace": "UnifiedPreModerationResults",
-  "content_types": [
-    "application/json"
-  ]
-}

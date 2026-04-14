@@ -1,32 +1,24 @@
-"""Integration tests for Amazon Ads MCP server bootstrap.
-
-This module tests the server creation and bootstrap process,
-ensuring the server can be properly initialized with OpenAPI
-specifications.
-"""
-
-import os
+"""Integration tests for Amazon Ads MCP server bootstrap."""
 
 import pytest
 
 
 @pytest.mark.asyncio
-async def test_create_server_bootstrap():
-    # Only run if resources directory exists; otherwise skip
-    import pathlib
+async def test_create_server_bootstrap_without_openapi_resources(monkeypatch):
+    from amazon_ads_mcp.auth.manager import AuthManager
+    from amazon_ads_mcp.config.settings import Settings
     from amazon_ads_mcp.server.mcp_server import create_amazon_ads_server
 
-    root = pathlib.Path(__file__).parents[2]
-    resources = root / "openapi" / "resources"
-    if not resources.exists():
-        pytest.skip("No openapi/resources present in repo")
+    test_settings = Settings(
+        _env_file=None,
+        auth_method="direct",
+        ad_api_client_id="test_client_id",
+        ad_api_client_secret="test_client_secret",
+        ad_api_refresh_token="test_refresh_token",
+    )
+    monkeypatch.setattr("amazon_ads_mcp.auth.manager.settings", test_settings)
+    AuthManager.reset()
 
-    # Use direct auth method for testing to avoid OpenBridge refresh token requirement
-    os.environ["AUTH_METHOD"] = "direct"
-    # Set minimal required credentials for direct auth
-    os.environ["AD_API_CLIENT_ID"] = "test_client_id"
-    os.environ["AD_API_CLIENT_SECRET"] = "test_client_secret"
-    os.environ["AD_API_REFRESH_TOKEN"] = "test_refresh_token"
-    
     srv = await create_amazon_ads_server()
+
     assert srv is not None

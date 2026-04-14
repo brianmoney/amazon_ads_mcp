@@ -1,7 +1,0 @@
-{
-  "version": "1.0",
-  "namespace": "AdsAPIv1SponsoredBrands",
-  "content_types": [
-    "application/json"
-  ]
-}

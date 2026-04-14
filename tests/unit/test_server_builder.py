@@ -1,76 +1,92 @@
-import json
 from types import SimpleNamespace
 
 import pytest
 
+from amazon_ads_mcp import __version__
 from amazon_ads_mcp.server.server_builder import ServerBuilder
 
 
 @pytest.fixture
 def builder(monkeypatch):
+    fake_auth_manager = SimpleNamespace(provider=None)
     monkeypatch.setattr(
         "amazon_ads_mcp.server.server_builder.get_auth_manager",
-        lambda: SimpleNamespace(provider=None),
+        lambda: fake_auth_manager,
+    )
+    monkeypatch.setattr(
+        "amazon_ads_mcp.server.builtin_tools.get_auth_manager",
+        lambda: fake_auth_manager,
+    )
+    monkeypatch.setattr(
+        "amazon_ads_mcp.server.builtin_prompts.get_auth_manager",
+        lambda: fake_auth_manager,
     )
     return ServerBuilder()
 
 
 @pytest.mark.asyncio
-async def test_load_namespace_mapping_prefixes(tmp_path, builder):
-    resources_dir = tmp_path / "resources"
-    resources_dir.mkdir()
-    packages = {"prefixes": {"Accounts": "accounts"}}
-    (resources_dir / "packages.json").write_text(json.dumps(packages))
+async def test_build_registers_retained_utility_tools(builder):
+    server = await builder.build()
 
-    mapping = await builder._load_namespace_mapping(resources_dir)
+    tools = await server.list_tools()
+    tool_names = {tool.name for tool in tools}
 
-    assert mapping == {"Accounts": "accounts"}
+    expected = {
+        "set_active_profile",
+        "get_active_profile",
+        "clear_active_profile",
+        "select_profile",
+        "summarize_profiles",
+        "search_profiles",
+        "page_profiles",
+        "refresh_profiles_cache",
+        "set_region",
+        "get_region",
+        "list_regions",
+        "get_routing_state",
+    }
 
-
-@pytest.mark.asyncio
-async def test_load_namespace_mapping_back_compat(tmp_path, builder):
-    resources_dir = tmp_path / "resources"
-    resources_dir.mkdir()
-    packages = {"Accounts": {"prefix": "acct"}}
-    (resources_dir / "packages.json").write_text(json.dumps(packages))
-
-    mapping = await builder._load_namespace_mapping(resources_dir)
-
-    assert mapping == {"Accounts": "acct"}
-
-
-@pytest.mark.asyncio
-async def test_load_package_allowlist_from_alias(tmp_path, builder, monkeypatch):
-    resources_dir = tmp_path / "resources"
-    resources_dir.mkdir()
-    (resources_dir / "SponsoredProducts.json").write_text("{}")
-
-    packages = {"aliases": {"sp": "SponsoredProducts"}}
-    (resources_dir / "packages.json").write_text(json.dumps(packages))
-
-    monkeypatch.setenv("AMAZON_AD_API_PACKAGES", "sp")
-
-    allowlist = await builder._load_package_allowlist(resources_dir)
-
-    assert allowlist == {"SponsoredProducts"}
+    assert expected.issubset(tool_names)
+    assert "download_export" not in tool_names
+    assert "list_downloads" not in tool_names
+    assert "get_download_url" not in tool_names
+    assert "list_tool_groups" not in tool_names
+    assert "enable_tool_group" not in tool_names
 
 
 @pytest.mark.asyncio
-async def test_load_package_allowlist_defaults(tmp_path, builder, monkeypatch):
-    resources_dir = tmp_path / "resources"
-    resources_dir.mkdir()
-    (resources_dir / "Profiles.json").write_text("{}")
+async def test_build_registers_health_route(builder):
+    server = await builder.build()
 
-    packages = {"defaults": ["profiles"]}
-    (resources_dir / "packages.json").write_text(json.dumps(packages))
-
-    monkeypatch.delenv("AMAZON_AD_API_PACKAGES", raising=False)
-
-    allowlist = await builder._load_package_allowlist(resources_dir)
-
-    assert allowlist == {"Profiles"}
+    assert hasattr(server, "custom_route")
 
 
+@pytest.mark.asyncio
+async def test_health_route_reports_package_version(monkeypatch):
+    routes = []
+    fake_auth_manager = SimpleNamespace(provider=None)
 
-# Code mode tests removed — code_mode_enabled is now a settings property,
-# not a ServerBuilder method. See config/settings.py.
+    monkeypatch.setattr(
+        "amazon_ads_mcp.server.server_builder.get_auth_manager",
+        lambda: fake_auth_manager,
+    )
+
+    class FakeServer:
+        def custom_route(self, path, methods=None):
+            def decorator(func):
+                routes.append((path, methods, func))
+                return func
+
+            return decorator
+
+    builder = ServerBuilder()
+    builder.server = FakeServer()
+
+    await builder._setup_health_check()
+
+    route = next(route for route in routes if route[0] == "/health")
+    response = await route[2](SimpleNamespace())
+
+    assert response.body == (
+        f'{{"status":"healthy","service":"amazon-ads-mcp","version":"{__version__}"}}'.encode()
+    )
