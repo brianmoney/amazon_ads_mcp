@@ -111,6 +111,10 @@ async def test_list_campaigns_returns_campaign_hierarchy(monkeypatch):
         "Content-Type": "application/vnd.spAdGroup.v3+json",
         "Accept": "application/vnd.spAdGroup.v3+json",
     }
+    assert fake_client.calls[1][1] == {
+        "campaignIdFilter": ["10", "11"],
+        "count": 40,
+    }
 
 
 @pytest.mark.asyncio
