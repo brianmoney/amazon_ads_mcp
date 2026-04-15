@@ -24,6 +24,12 @@ class FakeResponse:
     def json(self):
         return self._json_data
 
+    @property
+    def text(self):
+        if self._json_data is not None:
+            return json.dumps(self._json_data)
+        return self.content.decode("utf-8", "replace")
+
 
 class FakeReportClient:
     def __init__(self, post_responses, get_responses):
@@ -31,8 +37,8 @@ class FakeReportClient:
         self.get_responses = list(get_responses)
         self.calls = []
 
-    async def post(self, path, json=None):
-        self.calls.append(("POST", path, json))
+    async def post(self, path, json=None, headers=None):
+        self.calls.append(("POST", path, json, headers))
         return self.post_responses.pop(0)
 
     async def get(self, path):
@@ -65,11 +71,16 @@ async def test_run_sp_report_returns_parsed_rows():
         end_date="2026-01-31",
         group_by=["keyword"],
         columns=["keywordId"],
+        timeout_seconds=1,
         client=client,
     )
 
     assert result == {"report_id": "rpt-1", "rows": [{"keywordId": 1, "clicks": 2}]}
     assert client.calls[0][0:2] == ("POST", "/reporting/reports")
+    assert client.calls[0][3] == {
+        "Content-Type": "application/vnd.createasyncreportrequest.v3+json",
+        "Accept": "application/json",
+    }
     assert client.calls[1][0:2] == ("GET", "/reporting/reports/rpt-1")
 
 
@@ -142,3 +153,42 @@ async def test_run_sp_report_rejects_malformed_payloads():
             columns=["keywordId"],
             client=client,
         )
+
+
+@pytest.mark.asyncio
+async def test_run_sp_report_reuses_duplicate_report_id():
+    client = FakeReportClient(
+        post_responses=[
+            FakeResponse(
+                status_code=425,
+                content=b'{"code":"425","detail":"The Request is a duplicate of : a15115d8-3da4-49a4-95d5-cc0a3af5f85d"}',
+            )
+        ],
+        get_responses=[
+            FakeResponse(
+                json_data={
+                    "status": "COMPLETED",
+                    "url": "https://download.example/report.gz",
+                }
+            ),
+            FakeResponse(content=_gzip_payload([{"keywordId": 1}])),
+        ],
+    )
+
+    result = await run_sp_report(
+        report_type_id="spTargeting",
+        start_date="2026-01-01",
+        end_date="2026-01-31",
+        group_by=["targeting"],
+        columns=["keywordId"],
+        client=client,
+    )
+
+    assert result == {
+        "report_id": "a15115d8-3da4-49a4-95d5-cc0a3af5f85d",
+        "rows": [{"keywordId": 1}],
+    }
+    assert client.calls[1][0:2] == (
+        "GET",
+        "/reporting/reports/a15115d8-3da4-49a4-95d5-cc0a3af5f85d",
+    )

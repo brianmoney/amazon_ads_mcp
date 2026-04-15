@@ -297,6 +297,11 @@ def media_headers(media_type: str) -> dict[str, str]:
     return {"Content-Type": media_type, "Accept": media_type}
 
 
+def include_filter(values: list[str]) -> dict[str, list[str]]:
+    """Wrap identifier filters in the v3 list API include shape."""
+    return {"include": normalize_id_list(values)}
+
+
 async def sp_post(
     client: Any,
     path: str,
@@ -335,11 +340,11 @@ async def list_keywords(
     """List Sponsored Products keywords for preflight checks."""
     payload: dict[str, Any] = {"count": max(len(keyword_ids or []), 100)}
     if campaign_id:
-        payload["campaignIdFilter"] = [campaign_id]
+        payload["campaignIdFilter"] = include_filter([campaign_id])
     if ad_group_id:
-        payload["adGroupIdFilter"] = [ad_group_id]
+        payload["adGroupIdFilter"] = include_filter([ad_group_id])
     if keyword_ids:
-        payload["keywordIdFilter"] = normalize_id_list(keyword_ids)
+        payload["keywordIdFilter"] = include_filter(keyword_ids)
 
     response = await sp_post(
         client, "/sp/keywords/list", payload, SP_KEYWORD_MEDIA_TYPE
