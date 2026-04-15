@@ -6,6 +6,8 @@ import pytest
 
 from amazon_ads_mcp.tools import oauth as oauth_module
 from amazon_ads_mcp.tools.oauth import OAuthTools
+from amazon_ads_mcp.auth import manager as manager_module
+from amazon_ads_mcp.auth import secure_token_store as secure_token_store_module
 
 
 class DummySettings:
@@ -77,6 +79,19 @@ class FakeAsyncClient:
         return self.response
 
 
+def _mock_empty_token_sources(monkeypatch):
+    secure_store = MagicMock()
+    secure_store.get_token.return_value = None
+    monkeypatch.setattr(
+        secure_token_store_module, "get_secure_token_store", lambda: secure_store
+    )
+
+    auth_manager = types.SimpleNamespace(get_token=AsyncMock(return_value=None))
+    monkeypatch.setattr(manager_module, "get_auth_manager", lambda: auth_manager)
+
+    return secure_store, auth_manager
+
+
 @pytest.mark.asyncio
 async def test_start_oauth_flow_stores_state(monkeypatch):
     state_store = FakeStateStore()
@@ -120,6 +135,7 @@ async def test_check_oauth_status_active_tokens(monkeypatch):
 @pytest.mark.asyncio
 async def test_check_oauth_status_uses_settings_refresh_token(monkeypatch):
     ctx = DummyContext()
+    _mock_empty_token_sources(monkeypatch)
 
     class EnvBackedSettings(DummySettings):
         @property
@@ -138,6 +154,7 @@ async def test_check_oauth_status_uses_settings_refresh_token(monkeypatch):
 @pytest.mark.asyncio
 async def test_check_oauth_status_pending(monkeypatch):
     ctx = DummyContext()
+    _mock_empty_token_sources(monkeypatch)
     await ctx.set_state(
         "oauth_state",
         {
@@ -161,6 +178,7 @@ async def test_check_oauth_status_pending(monkeypatch):
 @pytest.mark.asyncio
 async def test_check_oauth_status_expired(monkeypatch):
     ctx = DummyContext()
+    _mock_empty_token_sources(monkeypatch)
     await ctx.set_state(
         "oauth_state",
         {
@@ -248,6 +266,7 @@ async def test_refresh_access_token_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_refresh_access_token_missing_refresh(monkeypatch):
     ctx = DummyContext()
+    _mock_empty_token_sources(monkeypatch)
     oauth = OAuthTools(DummySettings())
 
     result = await oauth.refresh_access_token(ctx)
