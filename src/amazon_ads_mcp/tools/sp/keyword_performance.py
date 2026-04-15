@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .common import (
+    SP_KEYWORD_MEDIA_TYPE,
     clamp_limit,
     extract_items,
     get_sp_client,
@@ -12,6 +13,7 @@ from .common import (
     parse_number,
     require_sp_context,
     safe_divide,
+    sp_post,
 )
 from .report_helper import run_sp_report
 
@@ -63,7 +65,9 @@ async def _fetch_keyword_bids(
     if keyword_ids:
         payload["keywordIdFilter"] = keyword_ids
 
-    response = await client.post("/sp/keywords/list", json=payload)
+    response = await sp_post(
+        client, "/sp/keywords/list", payload, SP_KEYWORD_MEDIA_TYPE
+    )
     response.raise_for_status()
 
     bids = {}

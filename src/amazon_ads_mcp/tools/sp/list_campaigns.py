@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from .common import (
+    SP_AD_GROUP_MEDIA_TYPE,
+    SP_CAMPAIGN_MEDIA_TYPE,
     clamp_limit,
     clamp_offset,
     extract_items,
@@ -12,6 +14,7 @@ from .common import (
     normalize_id_list,
     parse_number,
     require_sp_context,
+    sp_post,
 )
 
 
@@ -66,7 +69,12 @@ async def list_campaigns(
     if normalized_campaign_ids:
         campaign_request["campaignIdFilter"] = normalized_campaign_ids
 
-    campaign_response = await client.post("/sp/campaigns/list", json=campaign_request)
+    campaign_response = await sp_post(
+        client,
+        "/sp/campaigns/list",
+        campaign_request,
+        SP_CAMPAIGN_MEDIA_TYPE,
+    )
     campaign_response.raise_for_status()
     campaign_items = extract_items(campaign_response.json(), "campaigns")
 
@@ -78,12 +86,14 @@ async def list_campaigns(
 
     ad_group_items: list[dict[str, Any]] = []
     if returned_campaign_ids:
-        ad_group_response = await client.post(
+        ad_group_response = await sp_post(
+            client,
             "/sp/adGroups/list",
-            json={
+            {
                 "campaignIdFilter": returned_campaign_ids,
                 "count": max(len(returned_campaign_ids) * 20, bounded_limit),
             },
+            SP_AD_GROUP_MEDIA_TYPE,
         )
         ad_group_response.raise_for_status()
         ad_group_items = extract_items(ad_group_response.json(), "adGroups")
