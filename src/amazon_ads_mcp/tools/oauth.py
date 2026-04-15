@@ -168,6 +168,17 @@ class OAuthTools:
             except Exception as e:
                 logger.debug(f"Could not check auth manager: {e}")
 
+        # Direct auth can be configured entirely via environment variables.
+        # Surface that retained path over MCP even before any token persistence.
+        if not tokens_data and self.settings.effective_refresh_token:
+            tokens_data = {
+                "refresh_token": self.settings.effective_refresh_token,
+                "access_token": "",
+                "expires_in": 0,
+                "obtained_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await ctx.set_state("oauth_tokens", tokens_data)
+
         # Check if callback has been received (legacy path)
         if hasattr(self, "_callback_tokens"):
             tokens = self._callback_tokens
@@ -283,6 +294,10 @@ class OAuthTools:
                         refresh_token = token_entry.value
             except Exception as e:
                 logger.debug(f"Could not get token from auth manager: {e}")
+
+        # Direct auth can also source the refresh token directly from settings.
+        if not refresh_token and self.settings.effective_refresh_token:
+            refresh_token = self.settings.effective_refresh_token
 
         if not refresh_token:
             return {

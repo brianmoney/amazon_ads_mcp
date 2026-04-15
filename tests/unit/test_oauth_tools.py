@@ -14,6 +14,10 @@ class DummySettings:
     amazon_ads_region = "na"
     mcp_server_port = 9080
 
+    @property
+    def effective_refresh_token(self):
+        return None
+
 
 class DummyContext:
     def __init__(self):
@@ -32,7 +36,9 @@ class FakeStateStore:
         self.generated = None
         self.validation = (True, None)
 
-    def generate_state(self, auth_url, user_agent=None, ip_address=None, ttl_minutes=10):
+    def generate_state(
+        self, auth_url, user_agent=None, ip_address=None, ttl_minutes=10
+    ):
         self.generated = {
             "auth_url": auth_url,
             "user_agent": user_agent,
@@ -112,6 +118,24 @@ async def test_check_oauth_status_active_tokens(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_check_oauth_status_uses_settings_refresh_token(monkeypatch):
+    ctx = DummyContext()
+
+    class EnvBackedSettings(DummySettings):
+        @property
+        def effective_refresh_token(self):
+            return "env-refresh"
+
+    oauth = OAuthTools(EnvBackedSettings())
+    result = await oauth.check_oauth_status(ctx)
+
+    assert result["authenticated"] is True
+    assert result["status"] == "active"
+    assert result["has_refresh_token"] is True
+    assert ctx.state["oauth_tokens"]["refresh_token"] == "env-refresh"
+
+
+@pytest.mark.asyncio
 async def test_check_oauth_status_pending(monkeypatch):
     ctx = DummyContext()
     await ctx.set_state(
@@ -119,7 +143,9 @@ async def test_check_oauth_status_pending(monkeypatch):
         {
             "auth_url": "http://example.com/auth",
             "completed": False,
-            "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
+            "expires_at": (
+                datetime.now(timezone.utc) + timedelta(minutes=5)
+            ).isoformat(),
             "state": "[REDACTED]",
         },
     )
@@ -140,7 +166,9 @@ async def test_check_oauth_status_expired(monkeypatch):
         {
             "auth_url": "http://example.com/auth",
             "completed": False,
-            "expires_at": (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+            "expires_at": (
+                datetime.now(timezone.utc) - timedelta(minutes=1)
+            ).isoformat(),
             "state": "[REDACTED]",
         },
     )
@@ -192,13 +220,21 @@ async def test_refresh_access_token_success(monkeypatch):
         },
     )
 
-    monkeypatch.setattr(oauth_module.httpx, "AsyncClient", lambda timeout=None: FakeAsyncClient(response))
-    monkeypatch.setattr(oauth_module.RegionConfig, "get_oauth_endpoint", lambda region: "https://token")
+    monkeypatch.setattr(
+        oauth_module.httpx,
+        "AsyncClient",
+        lambda timeout=None: FakeAsyncClient(response),
+    )
+    monkeypatch.setattr(
+        oauth_module.RegionConfig, "get_oauth_endpoint", lambda region: "https://token"
+    )
 
     secure_store = MagicMock()
     from amazon_ads_mcp.auth import secure_token_store, manager
 
-    monkeypatch.setattr(secure_token_store, "get_secure_token_store", lambda: secure_store)
+    monkeypatch.setattr(
+        secure_token_store, "get_secure_token_store", lambda: secure_store
+    )
     monkeypatch.setattr(manager, "get_auth_manager", lambda: None)
 
     oauth = OAuthTools(DummySettings())
@@ -221,6 +257,52 @@ async def test_refresh_access_token_missing_refresh(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_refresh_access_token_uses_settings_refresh_token(monkeypatch):
+    ctx = DummyContext()
+
+    response = FakeResponse(
+        200,
+        {
+            "access_token": "new-access",
+            "refresh_token": "new-refresh",
+            "expires_in": 1800,
+        },
+    )
+
+    monkeypatch.setattr(
+        oauth_module.httpx,
+        "AsyncClient",
+        lambda timeout=None: FakeAsyncClient(response),
+    )
+    monkeypatch.setattr(
+        oauth_module.RegionConfig,
+        "get_oauth_endpoint",
+        lambda region: "https://token",
+    )
+
+    secure_store = MagicMock()
+    secure_store.get_token.return_value = None
+    from amazon_ads_mcp.auth import manager, secure_token_store
+
+    monkeypatch.setattr(
+        secure_token_store, "get_secure_token_store", lambda: secure_store
+    )
+    monkeypatch.setattr(manager, "get_auth_manager", lambda: None)
+
+    class EnvBackedSettings(DummySettings):
+        @property
+        def effective_refresh_token(self):
+            return "env-refresh"
+
+    oauth = OAuthTools(EnvBackedSettings())
+    result = await oauth.refresh_access_token(ctx)
+
+    assert result["status"] == "success"
+    assert ctx.state["oauth_tokens"]["access_token"] == "new-access"
+    assert secure_store.store_token.called is True
+
+
+@pytest.mark.asyncio
 async def test_handle_oauth_callback_success(monkeypatch):
     state_store = FakeStateStore()
     monkeypatch.setattr(oauth_module, "get_oauth_state_store", lambda: state_store)
@@ -234,13 +316,21 @@ async def test_handle_oauth_callback_success(monkeypatch):
             "scope": "scope",
         },
     )
-    monkeypatch.setattr(oauth_module.httpx, "AsyncClient", lambda timeout=None: FakeAsyncClient(response))
-    monkeypatch.setattr(oauth_module.RegionConfig, "get_oauth_endpoint", lambda region: "https://token")
+    monkeypatch.setattr(
+        oauth_module.httpx,
+        "AsyncClient",
+        lambda timeout=None: FakeAsyncClient(response),
+    )
+    monkeypatch.setattr(
+        oauth_module.RegionConfig, "get_oauth_endpoint", lambda region: "https://token"
+    )
 
     secure_store = MagicMock()
     from amazon_ads_mcp.auth import secure_token_store, manager
 
-    monkeypatch.setattr(secure_token_store, "get_secure_token_store", lambda: secure_store)
+    monkeypatch.setattr(
+        secure_token_store, "get_secure_token_store", lambda: secure_store
+    )
 
     auth_manager = types.SimpleNamespace(set_token=AsyncMock(), provider=None)
     monkeypatch.setattr(manager, "get_auth_manager", lambda: auth_manager)
@@ -251,7 +341,9 @@ async def test_handle_oauth_callback_success(monkeypatch):
         {
             "auth_url": "http://example.com/auth",
             "completed": False,
-            "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat(),
+            "expires_at": (
+                datetime.now(timezone.utc) + timedelta(minutes=1)
+            ).isoformat(),
             "state": "[REDACTED]",
         },
     )
