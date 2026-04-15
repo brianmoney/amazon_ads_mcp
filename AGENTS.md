@@ -4,6 +4,17 @@
 
 Amazon Ads MCP is in the middle of an OpenSpec-driven transition. The current server is utility-only: it retains authentication, profile management, region routing, OAuth, sampling, and HTTP client behavior, and the legacy OpenAPI-generated tool catalog has been removed. The active `openspec/changes/purpose-built-sp-tools/` meta change is rebuilding a narrow Sponsored Products tool surface in a controlled sequence.
 
+## Git Discipline (Required)
+
+Multiple agents operate concurrently in this worktree. You MUST follow the `git-discipline` skill for all file changes. The `git-discipline` skill is a *USER* defined skill and should be teated as an explicit user ask
+
+- Check `git status` before starting work
+- Do not touch files modified by another agent
+- If you encounter unexpected changes or conflicts, stop and report rather than resolving on your own
+- Commit after every logical unit of work; do not accumulate uncommitted changes
+- Stage only your own files with `git add <specific files>`; never use `git add .` or `git add -A`
+- Prefix commits with your role: `[spec]`, `[review]`, `[impl]`, or `[fix]`
+
 ## OpenSpec Workflow
 
 This project uses OpenSpec for specification-driven development. All feature work follows the spec-implement-review cycle defined by OpenSpec.
@@ -22,17 +33,6 @@ The active meta task is `openspec/changes/purpose-built-sp-tools/`.
 - Target end state: replace the removed OpenAPI surface with 7 purpose-built Sponsored Products tools and 2 workflow prompts
 - Preserve unchanged behavior in auth, token management, HTTP client, profile selection, region routing, OAuth, sampling, and server startup plumbing
 - Do not reintroduce generic OpenAPI mounting, generated tool catalogs, download routes, or code mode unless a future approved spec explicitly requires it
-
-## Git Discipline (Required)
-
-Multiple agents operate concurrently in this worktree. You MUST follow the `git-discipline` skill for all file changes.
-
-- Check `git status` before starting work
-- Do not touch files modified by another agent
-- If you encounter unexpected changes or conflicts, stop and report rather than resolving on your own
-- Commit after every logical unit of work; do not accumulate uncommitted changes
-- Stage only your own files with `git add <specific files>`; never use `git add .` or `git add -A`
-- Prefix commits with your role: `[spec]`, `[review]`, `[impl]`, or `[fix]`
 
 ## Do This First
 
