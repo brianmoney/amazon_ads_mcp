@@ -18,6 +18,10 @@ async def test_register_all_sp_tools_exposes_read_tool_names():
         "list_campaigns",
         "get_keyword_performance",
         "get_search_term_report",
+        "adjust_keyword_bids",
+        "add_keywords",
+        "negate_keywords",
+        "pause_keywords",
     }.issubset(tool_names)
 
 
@@ -47,3 +51,7 @@ async def test_server_builder_includes_sp_read_tools(builder):
     assert "list_campaigns" in tool_names
     assert "get_keyword_performance" in tool_names
     assert "get_search_term_report" in tool_names
+    assert "adjust_keyword_bids" in tool_names
+    assert "add_keywords" in tool_names
+    assert "negate_keywords" in tool_names
+    assert "pause_keywords" in tool_names

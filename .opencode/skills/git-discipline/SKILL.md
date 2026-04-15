@@ -1,49 +1,44 @@
 ---
 name: git-discipline
-description: Git commit discipline for multi-agent workflows sharing a single worktree. Use whenever making file changes in a project where multiple agents may be working concurrently.
+description: REQUIRED before and after ANY file creation or modification. This skill must be followed whenever you write, edit, delete, or rename any file. Non-negotiable in multi-agent workflows.
 ---
 
-# Git Discipline for Concurrent Agents
+# Git Discipline — Mandatory for All File Changes
 
-Multiple agents may be working in this repo simultaneously in the same worktree. Follow these rules to avoid conflicts and lost work.
+**STOP. If you are about to create, modify, or delete any file, these rules are mandatory. Your task is not complete until your changes are committed.**
 
-## Before starting any file changes
+## Pre-flight (before every file change)
 
-1. Run `git status` to see what's already staged or modified.
-2. If there are uncommitted changes from another agent, do NOT touch those files. Work around them or wait.
-3. Run `git diff --name-only` to see exactly which files are dirty.
+Run this before you touch any file:
 
-## While working
+```bash
+git status
+git diff --name-only
+```
 
-- Only modify files directly related to your current task.
-- Avoid modifying files that show up as already changed in `git status`.
-- If you must edit a file another agent has modified, commit your other work first, then coordinate.
+If any files are modified that are NOT part of your current task, do not touch those files. They belong to another agent.
 
-## After completing each logical unit of work
+## After EVERY file write
 
-Commit immediately. Do not batch multiple logical changes into one commit.
+Immediately after writing or modifying any file, before doing anything else:
 
-1. Stage only the files you changed: `git add <specific files>` — never `git add .` or `git add -A`.
-2. Write a commit message prefixed with your role in brackets:
-   - `[spec]` for specification/planning work
-   - `[review]` for review feedback and fixes
-   - `[impl]` for implementation work
-   - `[fix]` for bug fixes identified during review
-3. Commit format: `[role] short description of the single logical change`
-4. Example: `[impl] add user authentication endpoint`
+```bash
+git add <only the specific files you changed>
+git commit -m "[role] short description"
+```
 
-## Conflict prevention
+Use the role prefix that matches your function:
+- `[spec]` — specification, planning, design
+- `[review]` — code review, feedback, corrections
+- `[impl]` — implementation, feature code
+- `[fix]` — bug fixes
 
-- Keep changes small and focused. One logical change per commit.
-- If `git status` shows unexpected changes you didn't make, do not stage them. Leave them for the agent that owns them.
-- If you encounter a merge conflict or staged files you don't recognize, stop and report the situation rather than resolving blindly.
+**Never use `git add .` or `git add -A`.** Only stage files you personally changed.
 
-## What counts as "one logical change"
+## Rules
 
-- Adding or modifying a single feature or function
-- Updating a spec or plan document
-- Writing or updating a review
-- Fixing a single issue identified in review
-- Updating tests for a single change
-
-If you're unsure whether to commit, commit. Small commits are always safer than large ones in a concurrent workflow.
+1. **One logical change = one commit.** Do not continue to the next change until the current one is committed.
+2. **Your task is incomplete if changes are uncommitted.** Finishing the code is not finishing the task. The commit is part of the task.
+3. **Do not stage or commit files you did not change.** If `git status` shows changes you don't recognize, leave them alone.
+4. **If you hit a conflict or error on commit, stop and report it.** Do not resolve conflicts from other agents.
+5. **Check before, commit after. Every time. No exceptions.**
