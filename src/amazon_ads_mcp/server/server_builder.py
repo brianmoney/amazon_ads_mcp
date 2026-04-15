@@ -10,6 +10,7 @@ from .. import __version__
 from ..auth.manager import get_auth_manager
 from ..config.settings import settings
 from ..middleware.authentication import (
+    AuthSessionStateMiddleware,
     create_auth_middleware,
     create_openbridge_config,
 )
@@ -144,6 +145,10 @@ class ServerBuilder:
         )
         middleware_list.append(error_middleware)
         logger.info("Added ErrorHandlingMiddleware for consistent error handling")
+
+        # Persist auth/profile ContextVar state across MCP tool calls for all auth modes.
+        middleware_list.append(AuthSessionStateMiddleware())
+        logger.info("Added AuthSessionStateMiddleware")
 
         # Add response caching middleware (security-aware whitelist)
         if settings.enable_response_caching:

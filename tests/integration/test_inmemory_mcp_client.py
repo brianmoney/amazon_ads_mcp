@@ -42,8 +42,10 @@ def mock_auth_for_inmemory(monkeypatch):
 
     # Reset singletons so env changes take effect
     from amazon_ads_mcp.config.settings import Settings
+
     monkeypatch.setattr("amazon_ads_mcp.auth.manager.settings", Settings())
     from amazon_ads_mcp.auth.manager import AuthManager
+
     AuthManager.reset()
 
 
@@ -101,7 +103,9 @@ class TestInMemoryMCPOperations:
             ]
 
             for expected in expected_builtins:
-                assert expected in tool_names, f"Expected builtin tool '{expected}' not found"
+                assert expected in tool_names, (
+                    f"Expected builtin tool '{expected}' not found"
+                )
 
     @pytest.mark.asyncio
     async def test_get_region_returns_structured_response(self, mcp_server):
@@ -207,6 +211,8 @@ class TestInMemoryMCPOperations:
     @pytest.mark.asyncio
     async def test_set_active_profile_stores_profile(self, mcp_server):
         """Test set_active_profile correctly stores the profile ID."""
+        import json
+
         from fastmcp import Client
 
         test_profile_id = "1234567890"
@@ -214,14 +220,19 @@ class TestInMemoryMCPOperations:
         async with Client(mcp_server) as client:
             # Set a profile
             set_result = await client.call_tool(
-                "set_active_profile",
-                {"profile_id": test_profile_id}
+                "set_active_profile", {"profile_id": test_profile_id}
             )
             assert set_result is not None
 
             # Verify it was set
             get_result = await client.call_tool("get_active_profile", {})
             assert get_result is not None
+            assert get_result.content is not None
+
+            content = get_result.content[0]
+            if hasattr(content, "text"):
+                data = json.loads(content.text)
+                assert data["profile_id"] == test_profile_id
 
     @pytest.mark.asyncio
     async def test_clear_active_profile_removes_profile(self, mcp_server):
@@ -230,10 +241,7 @@ class TestInMemoryMCPOperations:
 
         async with Client(mcp_server) as client:
             # First set a profile
-            await client.call_tool(
-                "set_active_profile",
-                {"profile_id": "1234567890"}
-            )
+            await client.call_tool("set_active_profile", {"profile_id": "1234567890"})
 
             # Now clear it
             clear_result = await client.call_tool("clear_active_profile", {})
@@ -274,10 +282,7 @@ class TestInMemoryToolDiscovery:
             tools = await client.list_tools()
 
             # Find get_region tool
-            get_region_tool = next(
-                (t for t in tools if t.name == "get_region"),
-                None
-            )
+            get_region_tool = next((t for t in tools if t.name == "get_region"), None)
 
             assert get_region_tool is not None
             assert get_region_tool.description is not None
@@ -298,8 +303,7 @@ class TestInMemoryErrorHandling:
             # The tool should handle this gracefully and return an error response
             try:
                 result = await client.call_tool(
-                    "set_region",
-                    {"region_code": "invalid_region_code"}
+                    "set_region", {"region_code": "invalid_region_code"}
                 )
                 # Tool may return an error response with success=False
                 assert result is not None
@@ -351,7 +355,10 @@ class TestInMemoryWithMockedDependencies:
                 "currencyCode": "USD",
                 "dailyBudget": 100.0,
                 "timezone": "America/Los_Angeles",
-                "accountInfo": {"type": "seller", "marketplaceStringId": "ATVPDKIKX0DER"}
+                "accountInfo": {
+                    "type": "seller",
+                    "marketplaceStringId": "ATVPDKIKX0DER",
+                },
             }
         ]
         mock_response.status_code = 200
