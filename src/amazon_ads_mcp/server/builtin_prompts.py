@@ -13,6 +13,11 @@ async def register_all_builtin_prompts(server: "FastMCP") -> None:
 
     auth_mgr = get_auth_manager()
     provider_type = getattr(getattr(auth_mgr, "provider", None), "provider_type", None)
+    profile_recovery_prompt = (
+        "auth_profile_setup or troubleshoot_auth_or_routing"
+        if provider_type == "direct"
+        else "troubleshoot_auth_or_routing"
+    )
 
     if provider_type == "direct":
 
@@ -91,4 +96,63 @@ async def register_all_builtin_prompts(server: "FastMCP") -> None:
             "   - Tool: get_region\n"
             "   - Tool: get_routing_state\n"
             "Return: Current routing configuration and validation results."
+        )
+
+    @server.prompt(
+        name="sp_bid_optimization",
+        description="Guide Sponsored Products bid optimization with the supported tool sequence",
+        tags={"sponsored-products", "bids", "workflow"},
+        meta={"version": "0.1", "owner": "ads-platform"},
+        task=False,
+    )
+    def sp_bid_optimization_prompt() -> str:
+        return (
+            "Goal: Optimize Sponsored Products keyword bids with justified, bounded changes.\n"
+            "Steps for the model:\n"
+            "1) Verify execution context before any Sponsored Products action:\n"
+            "   - Tool: get_routing_state\n"
+            "   - Tool: get_active_profile\n"
+            "   - If the active region is missing, stop clearly and use setup_region before continuing\n"
+            f"   - If the active profile is missing or auth is not ready, stop clearly and use {profile_recovery_prompt}\n"
+            "2) Scope the workflow to the campaigns you intend to review:\n"
+            "   - Optional Tool: list_campaigns\n"
+            "3) Read keyword performance for one reporting window:\n"
+            "   - Tool: get_keyword_performance\n"
+            "4) Decide whether each keyword should receive an increase, decrease, or no change:\n"
+            "   - Base every action on the fetched performance data\n"
+            "   - Keep bid adjustments bounded and explain the rationale for each change\n"
+            "5) Apply only the approved bid updates:\n"
+            "   - Tool: adjust_keyword_bids\n"
+            "6) Return a final summary:\n"
+            "   - Include execution-context verification, campaigns reviewed, bid changes applied or recommended, and any keywords left unchanged with reasons."
+        )
+
+    @server.prompt(
+        name="sp_search_term_harvesting",
+        description="Guide Sponsored Products search term harvesting and negation decisions",
+        tags={"sponsored-products", "search-terms", "workflow"},
+        meta={"version": "0.1", "owner": "ads-platform"},
+        task=False,
+    )
+    def sp_search_term_harvesting_prompt() -> str:
+        return (
+            "Goal: Harvest Sponsored Products search terms into manual keywords or negatives using the supported tools.\n"
+            "Steps for the model:\n"
+            "1) Verify execution context before any Sponsored Products action:\n"
+            "   - Tool: get_routing_state\n"
+            "   - Tool: get_active_profile\n"
+            "   - If the active region is missing, stop clearly and use setup_region before continuing\n"
+            f"   - If the active profile is missing or auth is not ready, stop clearly and use {profile_recovery_prompt}\n"
+            "2) Scope the campaigns you want to inspect:\n"
+            "   - Optional Tool: list_campaigns\n"
+            "3) Read search term performance for one reporting window:\n"
+            "   - Tool: get_search_term_report\n"
+            "4) Classify each relevant term into harvest, negate, or leave unchanged:\n"
+            "   - Use the report metrics plus the existing manual and negative targeting context\n"
+            "   - Explain why each term should be added, negated, or left untouched\n"
+            "5) Apply only supported keyword mutations:\n"
+            "   - Tool: add_keywords for harvest candidates\n"
+            "   - Tool: negate_keywords for negation candidates\n"
+            "6) Return a final summary:\n"
+            "   - Include execution-context verification, harvested terms, negated terms, and terms left unchanged with reasons."
         )
