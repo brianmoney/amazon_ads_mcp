@@ -59,7 +59,13 @@ async def test_get_keyword_performance_enriches_rows(monkeypatch):
                         "cost": 25,
                         "sales14d": 200,
                         "orders14d": 4,
-                    }
+                    },
+                    {
+                        "campaignId": 99,
+                        "adGroupId": 20,
+                        "keywordId": 2,
+                        "keyword": "ignored",
+                    },
                 ],
             }
         ),
@@ -78,9 +84,14 @@ async def test_get_keyword_performance_enriches_rows(monkeypatch):
     assert row["cpc"] == 2.5
     assert row["acos"] == 0.125
     assert row["roas"] == 8.0
+    assert result["returned_count"] == 1
     assert fake_client.calls[0][2] == {
         "Content-Type": "application/vnd.spKeyword.v3+json",
         "Accept": "application/vnd.spKeyword.v3+json",
+    }
+    assert fake_client.calls[0][1] == {
+        "count": 100,
+        "campaignIdFilter": {"include": ["10"]},
     }
 
 

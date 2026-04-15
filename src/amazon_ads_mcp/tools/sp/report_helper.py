@@ -5,12 +5,20 @@ from __future__ import annotations
 import asyncio
 import gzip
 import json
+import re
 import time
+import uuid
 from typing import Any
 
 import httpx
 
 from .common import get_sp_client
+
+
+SP_CREATE_REPORT_MEDIA_TYPE = "application/vnd.createasyncreportrequest.v3+json"
+REPORT_ID_PATTERN = re.compile(
+    r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+)
 
 
 class SPReportError(RuntimeError):
@@ -55,7 +63,7 @@ def _build_report_request(
     time_unit: str,
 ) -> dict[str, Any]:
     return {
-        "name": f"{report_type_id}-{start_date}-{end_date}",
+        "name": f"{report_type_id}-{start_date}-{end_date}-{uuid.uuid4().hex[:8]}",
         "startDate": start_date,
         "endDate": end_date,
         "configuration": {
@@ -95,14 +103,33 @@ async def run_sp_report(
         time_unit=time_unit,
     )
 
+    create_payload = None
+    report_id = None
     try:
-        create_response = await client.post("/reporting/reports", json=request_body)
+        create_response = await client.post(
+            "/reporting/reports",
+            json=request_body,
+            headers={
+                "Content-Type": SP_CREATE_REPORT_MEDIA_TYPE,
+                "Accept": "application/json",
+            },
+        )
         create_response.raise_for_status()
         create_payload = create_response.json()
     except httpx.HTTPError as exc:
-        raise SPReportError("Sponsored Products report creation failed.") from exc
+        response = exc.response
+        if response is not None and response.status_code == 425:
+            duplicate_text = getattr(create_response, "text", "") or response.text
+            match = REPORT_ID_PATTERN.search(duplicate_text)
+            if match:
+                report_id = match.group(1)
+            else:
+                raise SPReportError(
+                    "Sponsored Products report creation failed."
+                ) from exc
+        else:
+            raise SPReportError("Sponsored Products report creation failed.") from exc
 
-    report_id = None
     if isinstance(create_payload, dict):
         report_id = create_payload.get("reportId")
     if not report_id:

@@ -90,7 +90,7 @@ async def list_campaigns(
             client,
             "/sp/adGroups/list",
             {
-                "campaignIdFilter": returned_campaign_ids,
+                "campaignIdFilter": {"include": returned_campaign_ids},
                 "count": clamp_limit(len(returned_campaign_ids) * 20),
             },
             SP_AD_GROUP_MEDIA_TYPE,

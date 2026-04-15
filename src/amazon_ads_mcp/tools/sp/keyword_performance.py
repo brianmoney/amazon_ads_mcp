@@ -24,13 +24,13 @@ KEYWORD_REPORT_COLUMNS = [
     "adGroupId",
     "adGroupName",
     "keywordId",
-    "keywordText",
+    "keyword",
     "matchType",
     "impressions",
     "clicks",
     "cost",
     "sales14d",
-    "orders14d",
+    "purchases14d",
 ]
 
 
@@ -49,6 +49,21 @@ def _build_filters(
     return filters
 
 
+def _matches_requested_scope(
+    row: dict[str, Any],
+    campaign_ids: list[str],
+    ad_group_ids: list[str],
+    keyword_ids: list[str],
+) -> bool:
+    if campaign_ids and str(row.get("campaignId", "")) not in campaign_ids:
+        return False
+    if ad_group_ids and str(row.get("adGroupId", "")) not in ad_group_ids:
+        return False
+    if keyword_ids and str(row.get("keywordId", "")) not in keyword_ids:
+        return False
+    return True
+
+
 async def _fetch_keyword_bids(
     client,
     campaign_ids: list[str],
@@ -59,11 +74,11 @@ async def _fetch_keyword_bids(
         "count": clamp_limit(len(keyword_ids) or 100, default=100)
     }
     if campaign_ids:
-        payload["campaignIdFilter"] = campaign_ids
+        payload["campaignIdFilter"] = {"include": campaign_ids}
     if ad_group_ids:
-        payload["adGroupIdFilter"] = ad_group_ids
+        payload["adGroupIdFilter"] = {"include": ad_group_ids}
     if keyword_ids:
-        payload["keywordIdFilter"] = keyword_ids
+        payload["keywordIdFilter"] = {"include": keyword_ids}
 
     response = await sp_post(
         client, "/sp/keywords/list", payload, SP_KEYWORD_MEDIA_TYPE
@@ -86,7 +101,7 @@ def _normalize_keyword_row(
     clicks = parse_number(row.get("clicks"))
     spend = parse_number(row.get("cost"))
     sales = parse_number(row.get("sales14d"))
-    orders = parse_number(row.get("orders14d"))
+    orders = parse_number(row.get("orders14d") or row.get("purchases14d"))
 
     return {
         "campaign_id": str(row.get("campaignId", "")),
@@ -124,19 +139,19 @@ async def get_keyword_performance(
     normalized_campaign_ids = normalize_id_list(campaign_ids)
     normalized_ad_group_ids = normalize_id_list(ad_group_ids)
     normalized_keyword_ids = normalize_id_list(keyword_ids)
-    filters = _build_filters(
-        normalized_campaign_ids,
-        normalized_ad_group_ids,
-        normalized_keyword_ids,
-    )
+    filters = _build_filters([], [], [])
 
     report = await run_sp_report(
-        report_type_id="spKeyword",
+        report_type_id="spTargeting",
         start_date=start_date,
         end_date=end_date,
-        group_by=["keyword"],
+        group_by=["targeting"],
         columns=KEYWORD_REPORT_COLUMNS,
-        filters=filters,
+        filters=[
+            {"field": "keywordType", "values": ["BROAD", "PHRASE", "EXACT"]},
+            *filters,
+        ],
+        timeout_seconds=360.0,
         client=client,
     )
     keyword_bids = await _fetch_keyword_bids(
@@ -147,9 +162,19 @@ async def get_keyword_performance(
     )
 
     bounded_limit = clamp_limit(limit, default=100)
+    filtered_rows = [
+        row
+        for row in report["rows"]
+        if _matches_requested_scope(
+            row,
+            normalized_campaign_ids,
+            normalized_ad_group_ids,
+            normalized_keyword_ids,
+        )
+    ]
     rows = [
         _normalize_keyword_row(row, keyword_bids)
-        for row in report["rows"][:bounded_limit]
+        for row in filtered_rows[:bounded_limit]
     ]
 
     return {
