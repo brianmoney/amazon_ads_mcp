@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from fastmcp import Context, FastMCP
 
+from .add_keywords import add_keywords
+from .adjust_keyword_bids import adjust_keyword_bids
 from .keyword_performance import get_keyword_performance
 from .list_campaigns import list_campaigns
+from .negate_keywords import negate_keywords
+from .pause_keywords import pause_keywords
 from .search_term_report import get_search_term_report
 
 
@@ -71,3 +75,56 @@ async def register_all_sp_tools(server: FastMCP) -> None:
             campaign_ids=campaign_ids,
             limit=limit,
         )
+
+    @server.tool(
+        name="adjust_keyword_bids",
+        description="Adjust Sponsored Products keyword bids with audit details",
+    )
+    async def adjust_keyword_bids_tool(
+        ctx: Context,
+        adjustments: list[dict[str, Any]],
+    ) -> dict:
+        return await adjust_keyword_bids(adjustments=adjustments)
+
+    @server.tool(
+        name="add_keywords",
+        description="Create Sponsored Products keywords with duplicate detection",
+    )
+    async def add_keywords_tool(
+        ctx: Context,
+        campaign_id: str,
+        ad_group_id: str,
+        keywords: list[dict[str, Any]],
+    ) -> dict:
+        return await add_keywords(
+            campaign_id=campaign_id,
+            ad_group_id=ad_group_id,
+            keywords=keywords,
+        )
+
+    @server.tool(
+        name="negate_keywords",
+        description="Create negative exact Sponsored Products keywords",
+    )
+    async def negate_keywords_tool(
+        ctx: Context,
+        campaign_id: str,
+        keywords: list[str],
+        ad_group_id: Optional[str] = None,
+    ) -> dict:
+        return await negate_keywords(
+            campaign_id=campaign_id,
+            keywords=keywords,
+            ad_group_id=ad_group_id,
+        )
+
+    @server.tool(
+        name="pause_keywords",
+        description="Pause Sponsored Products keywords with no-op detection",
+    )
+    async def pause_keywords_tool(
+        ctx: Context,
+        keyword_ids: list[str],
+        reason: Optional[str] = None,
+    ) -> dict:
+        return await pause_keywords(keyword_ids=keyword_ids, reason=reason)
