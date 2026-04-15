@@ -19,7 +19,11 @@ class FakeResponse:
 
 
 class FakeClient:
-    async def post(self, path, json=None):
+    def __init__(self):
+        self.calls = []
+
+    async def post(self, path, json=None, headers=None):
+        self.calls.append((path, json, headers))
         assert path == "/sp/keywords/list"
         return FakeResponse({"keywords": [{"keywordId": 1, "bid": 1.25}]})
 
@@ -74,6 +78,10 @@ async def test_get_keyword_performance_enriches_rows(monkeypatch):
     assert row["cpc"] == 2.5
     assert row["acos"] == 0.125
     assert row["roas"] == 8.0
+    assert fake_client.calls[0][2] == {
+        "Content-Type": "application/vnd.spKeyword.v3+json",
+        "Accept": "application/vnd.spKeyword.v3+json",
+    }
 
 
 @pytest.mark.asyncio

@@ -27,8 +27,8 @@ class FakeClient:
     def __init__(self):
         self.calls = []
 
-    async def post(self, path, json=None):
-        self.calls.append((path, json))
+    async def post(self, path, json=None, headers=None):
+        self.calls.append((path, json, headers))
         if path == "/sp/campaigns/list":
             return FakeResponse(
                 {
@@ -102,6 +102,14 @@ async def test_list_campaigns_returns_campaign_hierarchy(monkeypatch):
         "startIndex": 5,
         "stateFilter": ["ENABLED"],
         "campaignIdFilter": ["10", "11"],
+    }
+    assert fake_client.calls[0][2] == {
+        "Content-Type": "application/vnd.spCampaign.v3+json",
+        "Accept": "application/vnd.spCampaign.v3+json",
+    }
+    assert fake_client.calls[1][2] == {
+        "Content-Type": "application/vnd.spAdGroup.v3+json",
+        "Accept": "application/vnd.spAdGroup.v3+json",
     }
 
 
