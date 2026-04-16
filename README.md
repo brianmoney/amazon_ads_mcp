@@ -37,7 +37,8 @@ The runnable server currently exposes utility tools only:
 
 ```bash
 uv sync
-docker-compose up -d
+docker compose build
+docker compose up -d
 uv run python -m amazon_ads_mcp.server.mcp_server --transport http --port 9080
 ```
 
@@ -70,6 +71,60 @@ Example OpenBridge environment:
 export AUTH_METHOD=openbridge
 export OPENBRIDGE_API_KEY="your-api-key"
 ```
+
+## Docker Direct Auth
+
+The checked-in Docker workflow builds from local source and defaults to direct Amazon Ads auth.
+
+Required `.env` values:
+
+```bash
+AUTH_METHOD=direct
+PORT=9080
+AMAZON_AD_API_CLIENT_ID="your-client-id"
+AMAZON_AD_API_CLIENT_SECRET="your-client-secret"
+AMAZON_AD_API_REFRESH_TOKEN="your-refresh-token"
+```
+
+Optional direct-auth values:
+
+```bash
+AMAZON_AD_API_PROFILE_ID="1234567890"
+AMAZON_ADS_REGION="na"
+OAUTH_REDIRECT_URI="http://localhost:9080/auth/callback"
+AMAZON_ADS_TOKEN_PERSIST=true
+```
+
+Build and start the container:
+
+```bash
+docker compose build
+docker compose up -d
+docker compose logs -f amazon-ads-mcp
+```
+
+Focused checks:
+
+```bash
+curl http://localhost:9080/health
+curl -i http://localhost:9080/mcp
+docker compose ps
+```
+
+Persistence behavior:
+
+- `downloads` is mounted at `/app/data` for exported files and report outputs.
+- `cache` is mounted at `/app/.cache` for token and runtime cache data.
+- The root compose file uses named Docker volumes so data survives container recreation until you remove the volumes.
+- `docker-compose.local.yaml` bind-mounts `./data` and `./.cache` for local inspection.
+
+To intentionally switch Docker testing to OpenBridge, override the auth method and provide OpenBridge credentials:
+
+```bash
+AUTH_METHOD=openbridge OPENBRIDGE_REFRESH_TOKEN="your-openbridge-token" docker compose up -d
+```
+
+`AMAZON_ADS_AUTH_METHOD` is still accepted as a legacy alias, but `AUTH_METHOD` is the documented contract.
 
 ## Development
 

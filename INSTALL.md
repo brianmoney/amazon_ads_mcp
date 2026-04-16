@@ -50,11 +50,11 @@ python -m amazon_ads_mcp.server
 python -m amazon_ads_mcp.server --transport http --port 9080
 ```
 
-### Path 2: Run with Docker (Recommended for Production)
+### Path 2: Run with Docker
 
 #### Prerequisites:
-- 🐳 Docker and Docker Compose
-- Amazon Ads API access or Ads API Partner Provider (i.e. Openbridge)
+- Docker with the `docker compose` plugin
+- Amazon Ads API access for direct auth, or OpenBridge credentials if you intentionally test that path
 
 #### Installation:
 
@@ -66,19 +66,55 @@ cd amazon-ads-mcp
 # Copy the environment template
 cp .env.example .env
 
-# Edit .env with your credentials
-# Set your Amazon Ads API credentials in .env file
+# Edit .env for direct Amazon Ads auth
+# Required:
+#   AUTH_METHOD=direct
+#   PORT=9080
+#   AMAZON_AD_API_CLIENT_ID=...
+#   AMAZON_AD_API_CLIENT_SECRET=...
+#   AMAZON_AD_API_REFRESH_TOKEN=...
 
-# Start the server with Docker Compose
-docker-compose up -d
+# Optional:
+#   AMAZON_AD_API_PROFILE_ID=...
+#   AMAZON_ADS_REGION=na
+#   OAUTH_REDIRECT_URI=http://localhost:9080/auth/callback
+#   AMAZON_ADS_TOKEN_PERSIST=true
+
+# Build from the local repository context
+docker compose build
+
+# Start the server
+docker compose up -d
 
 # The server will be available at http://localhost:9080
 # Check logs
-docker-compose logs -f
+docker compose logs -f amazon-ads-mcp
+
+# Verify the container is healthy enough to serve HTTP
+curl http://localhost:9080/health
 
 # Stop the server
-docker-compose down
+docker compose down
 ```
+
+The default `docker-compose.yaml` workflow is source-built and direct-auth first. It publishes host port `9080` to container port `9080`, persists cache data under `/app/.cache`, and persists downloaded artifacts under `/app/data`.
+
+If you want bind mounts instead of named Docker volumes during local development, use:
+
+```bash
+docker compose -f docker-compose.local.yaml build
+docker compose -f docker-compose.local.yaml up -d
+```
+
+That local compose file writes cache data to `./.cache` and downloads to `./data`.
+
+To intentionally switch Docker testing to OpenBridge, override the auth method and provide OpenBridge credentials:
+
+```bash
+AUTH_METHOD=openbridge OPENBRIDGE_REFRESH_TOKEN="your-openbridge-token" docker compose up -d
+```
+
+`AUTH_METHOD` is the documented selector. `AMAZON_ADS_AUTH_METHOD` remains supported as a legacy alias.
 
 **Quick Docker Run (without compose):**
 ```bash
@@ -89,8 +125,10 @@ docker build -t amazon-ads-mcp .
 docker run -d \
   --name amazon-ads-mcp \
   -p 9080:9080 \
+  -e AUTH_METHOD=direct \
   -e AMAZON_AD_API_CLIENT_ID="your-client-id" \
   -e AMAZON_AD_API_CLIENT_SECRET="your-client-secret" \
+  -e AMAZON_AD_API_REFRESH_TOKEN="your-refresh-token" \
   amazon-ads-mcp
 ```
 
@@ -104,12 +142,16 @@ docker run -d \
 Set the following environment variables:
 
 ```bash
-
-# Region Configuration (optional, defaults to "na")
-export AMAZON_ADS_REGION="na"  # Options: na, eu, fe
-# Optional: Pre-authorized refresh token for server owner
-# This allows the server owner to skip the OAuth flow
+export AUTH_METHOD="direct"
+export AMAZON_AD_API_CLIENT_ID="your-client-id"
+export AMAZON_AD_API_CLIENT_SECRET="your-client-secret"
 export AMAZON_AD_API_REFRESH_TOKEN="your-refresh-token"
+
+# Region configuration (optional, defaults to "na")
+export AMAZON_ADS_REGION="na"  # Options: na, eu, fe
+
+# Optional callback override for browser-based OAuth testing
+export OAUTH_REDIRECT_URI="http://localhost:9080/auth/callback"
 ```
 
 
@@ -212,4 +254,3 @@ For **Production**:
 - Missing `cryptography` library will **refuse** to persist tokens unless `AMAZON_ADS_ALLOW_PLAINTEXT_PERSIST=true` (not recommended)
 - Invalid encryption keys trigger warnings and fallback to machine-derived keys
 - Production environments (`ENV=production`) issue warnings when using machine-derived keys
-
