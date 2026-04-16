@@ -287,6 +287,10 @@ archive/
 *.7z
 *.rar
 
+# Always track OpenSpec artifacts, including archived changes.
+!openspec/
+!openspec/**
+
 # PyPI configuration
 .pypirc
 
