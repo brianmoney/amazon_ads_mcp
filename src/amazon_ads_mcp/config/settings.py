@@ -7,6 +7,8 @@ Settings are loaded from environment variables and .env files.
 
 from typing import Literal, Optional
 
+import os
+
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -58,7 +60,9 @@ class Settings(BaseSettings):
 
     # Authentication method
     auth_method: Literal["direct", "openbridge"] = Field(
-        "openbridge", description="Authentication method to use"
+        "openbridge",
+        validation_alias=AliasChoices("AUTH_METHOD", "AMAZON_ADS_AUTH_METHOD"),
+        description="Authentication method to use",
     )
 
     # Direct Amazon Ads API Configuration (BYOA - Bring Your Own API)
@@ -146,11 +150,13 @@ class Settings(BaseSettings):
     # MCP Server Configuration
     mcp_server_name: str = Field("amazon-ads-api", description="MCP Server Name")
     mcp_server_host: str = Field("localhost", description="MCP Server Host")
-    mcp_server_port: int = Field(8000, description="MCP Server Port")
+    mcp_server_port: int = Field(9080, description="MCP Server Port")
 
     # Runtime configuration (set by CLI or Docker)
     port: Optional[int] = Field(
-        None, description="HTTP server port (from PORT env var or CLI)"
+        None,
+        validation_alias=AliasChoices("PORT", "MCP_SERVER_PORT"),
+        description="HTTP server port (from PORT env var or CLI)",
     )
 
     # Logging
@@ -354,6 +360,26 @@ class Settings(BaseSettings):
         if self.amazon_ads_sandbox_mode:
             base = base.replace("advertising-api", "advertising-api-test")
         return base
+
+    @property
+    def runtime_port(self) -> int:
+        """Return the active HTTP port used by the local runtime contract."""
+        port = self.port
+        if port is None:
+            env_port = os.getenv("PORT")
+            if env_port:
+                try:
+                    port = int(env_port)
+                except ValueError:
+                    port = None
+        return port or self.mcp_server_port
+
+    @property
+    def resolved_oauth_redirect_uri(self) -> str:
+        """Return the configured callback URL for local OAuth flows."""
+        return self.oauth_redirect_uri or (
+            f"http://localhost:{self.runtime_port}/auth/callback"
+        )
 
 
 settings = Settings()

@@ -31,10 +31,10 @@ RUN mkdir -p /app/.cache/amazon-ads-mcp /app/data && \
     chmod 755 /app/.cache /app/.cache/amazon-ads-mcp /app/data
 
 # Runtime configuration
-ENV TRANSPORT=streamable-http \
+ENV TRANSPORT=http \
     HOST=0.0.0.0 \
-    PORT=8000
+    PORT=9080
 
-EXPOSE 8000
+EXPOSE 9080
 
 CMD ["python", "-m", "amazon_ads_mcp.server", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "9080"]

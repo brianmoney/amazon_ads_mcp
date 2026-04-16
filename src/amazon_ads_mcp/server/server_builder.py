@@ -309,8 +309,6 @@ class ServerBuilder:
             @self.server.custom_route("/auth/callback", methods=["GET"])
             async def oauth_callback(request: Request):
                 """Handle OAuth callback from Amazon with secure state validation."""
-                import os
-
                 from ..auth.oauth_state_store import get_oauth_state_store
 
                 code = request.query_params.get("code")
@@ -378,8 +376,7 @@ class ServerBuilder:
                             data={
                                 "grant_type": "authorization_code",
                                 "code": code,
-                                # Use PORT env var or request port or default
-                                "redirect_uri": f"http://localhost:{os.getenv('PORT') or request.url.port or 9080}/auth/callback",
+                                "redirect_uri": settings.resolved_oauth_redirect_uri,
                                 "client_id": settings.ad_api_client_id,
                                 "client_secret": settings.ad_api_client_secret,
                             },

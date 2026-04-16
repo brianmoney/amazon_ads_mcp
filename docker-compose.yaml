@@ -11,7 +11,7 @@ services:
       # Server runtime
       - TRANSPORT=http
       - HOST=0.0.0.0
-      - PORT=8000
+      - PORT=${PORT:-9080}
       - LOG_LEVEL=INFO
       # AMAZON_AD_API_PACKAGES is set in .env (env_file values are overridden by
       # explicit environment entries, so we keep it in .env only)
@@ -19,11 +19,9 @@ services:
       # Set to 'true' to cache refresh tokens across restarts (see docs for security implications)
       - AMAZON_ADS_TOKEN_PERSIST=false
       - AMAZON_ADS_CACHE_DIR=/app/.cache/amazon-ads-mcp
-      # Authentication method - set to 'openbridge' for header-based auth
-      - AMAZON_ADS_AUTH_METHOD=openbridge
-      # OpenBridge auth defaults are now built-in:
-      # REFRESH_TOKEN_ENABLED=true, AUTH_ENABLED=true, JWT_VALIDATION_ENABLED=false
-      # Override only if you need non-default behavior
+      # Canonical auth selection for Docker testing.
+      # Override AUTH_METHOD=openbridge when intentionally exercising that path.
+      - AUTH_METHOD=${AUTH_METHOD:-direct}
       # Background tasks (enabled by default - allows long-running tools to run in background)
       # ENABLE_TASKS=false
       # Runtime OpenAPI slimming (on by default - set to 'false' to disable)
@@ -35,7 +33,7 @@ services:
       # PROGRESSIVE_TOOL_DISCLOSURE=true
 
     ports:
-      - "${PORT:-8000}:${PORT:-8000}"
+      - "${PORT:-9080}:${PORT:-9080}"
     volumes:
       # Persist downloaded exports/reports
       - downloads:/app/data
@@ -45,7 +43,7 @@ services:
       "python", "-m", "amazon_ads_mcp.server",
       "--transport", "${TRANSPORT:-http}",
       "--host", "${HOST:-0.0.0.0}",
-      "--port", "${PORT:-8000}"
+      "--port", "${PORT:-9080}"
     ]
  
 volumes:
