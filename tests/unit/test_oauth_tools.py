@@ -15,6 +15,14 @@ class DummySettings:
     ad_api_client_secret = "client-secret"
     amazon_ads_region = "na"
     mcp_server_port = 9080
+    oauth_redirect_uri = None
+
+    @property
+    def resolved_oauth_redirect_uri(self):
+        return (
+            self.oauth_redirect_uri
+            or f"http://localhost:{self.mcp_server_port}/auth/callback"
+        )
 
     @property
     def effective_refresh_token(self):
@@ -108,6 +116,15 @@ async def test_start_oauth_flow_stores_state(monkeypatch):
     assert ctx.state["oauth_state"]["auth_url"] == result["auth_url"]
     assert state_store.generated["user_agent"] == "ua"
     assert state_store.generated["ip_address"] == "1.2.3.4"
+
+
+def test_oauth_tools_uses_explicit_redirect_uri():
+    class RedirectSettings(DummySettings):
+        oauth_redirect_uri = "http://127.0.0.1:9999/auth/callback"
+
+    oauth = OAuthTools(RedirectSettings())
+
+    assert oauth.redirect_uri == "http://127.0.0.1:9999/auth/callback"
 
 
 @pytest.mark.asyncio

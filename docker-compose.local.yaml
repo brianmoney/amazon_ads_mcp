@@ -17,8 +17,8 @@ services:
       # Server runtime — matches .env.example defaults
       - TRANSPORT=${TRANSPORT:-http}
       - HOST=0.0.0.0
-      - PORT=${PORT:-8000}
-      - AMAZON_ADS_AUTH_METHOD=${AMAZON_ADS_AUTH_METHOD:-openbridge}
+      - PORT=${PORT:-9080}
+      - AUTH_METHOD=${AUTH_METHOD:-direct}
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       # Token persistence — local dev uses host-mounted cache
       - AMAZON_ADS_TOKEN_PERSIST=${AMAZON_ADS_TOKEN_PERSIST:-true}
@@ -26,7 +26,7 @@ services:
       # Download directory
       - AMAZON_ADS_DOWNLOAD_DIR=/app/data
     ports:
-      - "${PORT:-9080}:${PORT:-8000}"
+      - "${PORT:-9080}:${PORT:-9080}"
     volumes:
       # Mount local directories for easy inspection
       - ./data:/app/data
@@ -35,5 +35,5 @@ services:
       "python", "-m", "amazon_ads_mcp.server",
       "--transport", "${TRANSPORT:-http}",
       "--host", "0.0.0.0",
-      "--port", "${PORT:-8000}"
+      "--port", "${PORT:-9080}"
     ]
