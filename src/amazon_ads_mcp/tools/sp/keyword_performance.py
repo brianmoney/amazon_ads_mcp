@@ -15,7 +15,7 @@ from .common import (
     safe_divide,
     sp_post,
 )
-from .report_helper import run_sp_report
+from .report_helper import resume_sp_report, run_sp_report
 
 
 KEYWORD_REPORT_COLUMNS = [
@@ -131,6 +131,7 @@ async def get_keyword_performance(
     ad_group_ids: list[str] | None = None,
     keyword_ids: list[str] | None = None,
     limit: int = 100,
+    resume_from_report_id: str | None = None,
 ) -> dict[str, Any]:
     """Return normalized keyword performance rows with bid context."""
     auth_manager, profile_id, region = require_sp_context()
@@ -141,19 +142,22 @@ async def get_keyword_performance(
     normalized_keyword_ids = normalize_id_list(keyword_ids)
     filters = _build_filters([], [], [])
 
-    report = await run_sp_report(
-        report_type_id="spTargeting",
-        start_date=start_date,
-        end_date=end_date,
-        group_by=["targeting"],
-        columns=KEYWORD_REPORT_COLUMNS,
-        filters=[
-            {"field": "keywordType", "values": ["BROAD", "PHRASE", "EXACT"]},
-            *filters,
-        ],
-        timeout_seconds=360.0,
-        client=client,
-    )
+    if resume_from_report_id:
+        report = await resume_sp_report(resume_from_report_id, client=client)
+    else:
+        report = await run_sp_report(
+            report_type_id="spTargeting",
+            start_date=start_date,
+            end_date=end_date,
+            group_by=["targeting"],
+            columns=KEYWORD_REPORT_COLUMNS,
+            filters=[
+                {"field": "keywordType", "values": ["BROAD", "PHRASE", "EXACT"]},
+                *filters,
+            ],
+            timeout_seconds=360.0,
+            client=client,
+        )
     keyword_bids = await _fetch_keyword_bids(
         client,
         normalized_campaign_ids,
@@ -188,6 +192,7 @@ async def get_keyword_performance(
             "ad_group_ids": normalized_ad_group_ids,
             "keyword_ids": normalized_keyword_ids,
             "limit": bounded_limit,
+            "resume_from_report_id": resume_from_report_id,
         },
         "rows": rows,
         "returned_count": len(rows),

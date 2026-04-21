@@ -163,3 +163,64 @@ async def test_get_keyword_performance_surfaces_report_failures(monkeypatch):
             start_date="2026-01-01",
             end_date="2026-01-31",
         )
+
+
+@pytest.mark.asyncio
+async def test_get_keyword_performance_resumes_completed_report(monkeypatch):
+    fake_client = FakeClient()
+    manager = SimpleNamespace()
+
+    monkeypatch.setattr(
+        keyword_module, "require_sp_context", lambda: (manager, "profile-1", "eu")
+    )
+    monkeypatch.setattr(
+        keyword_module, "get_sp_client", AsyncMock(return_value=fake_client)
+    )
+    run_report = AsyncMock()
+    resume_report = AsyncMock(
+        return_value={
+            "report_id": "rpt-resume",
+            "rows": [
+                {
+                    "campaignId": 10,
+                    "adGroupId": 20,
+                    "keywordId": 1,
+                    "keywordText": "shoes",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(keyword_module, "run_sp_report", run_report)
+    monkeypatch.setattr(keyword_module, "resume_sp_report", resume_report)
+
+    result = await keyword_module.get_keyword_performance(
+        start_date="2026-01-01",
+        end_date="2026-01-31",
+        resume_from_report_id="rpt-resume",
+    )
+
+    assert result["report_id"] == "rpt-resume"
+    assert result["filters"]["resume_from_report_id"] == "rpt-resume"
+    run_report.assert_not_called()
+    resume_report.assert_awaited_once_with("rpt-resume", client=fake_client)
+
+
+@pytest.mark.asyncio
+async def test_get_keyword_performance_surfaces_non_ready_resume(monkeypatch):
+    fake_client = FakeClient()
+    manager = SimpleNamespace()
+
+    monkeypatch.setattr(
+        keyword_module, "require_sp_context", lambda: (manager, "profile-1", "eu")
+    )
+    monkeypatch.setattr(
+        keyword_module, "get_sp_client", AsyncMock(return_value=fake_client)
+    )
+    monkeypatch.setattr(keyword_module, "resume_sp_report", AsyncMock(side_effect=SPReportError("not ready (status: PROCESSING)")))
+
+    with pytest.raises(SPReportError, match="PROCESSING"):
+        await keyword_module.get_keyword_performance(
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            resume_from_report_id="rpt-pending",
+        )
