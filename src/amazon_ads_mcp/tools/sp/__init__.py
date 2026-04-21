@@ -50,6 +50,7 @@ async def register_all_sp_tools(server: FastMCP) -> None:
         keyword_ids: Optional[list[str]] = None,
         limit: int = 100,
         resume_from_report_id: Optional[str] = None,
+        timeout_seconds: float = 360.0,
     ) -> dict:
         return await get_keyword_performance(
             start_date=start_date,
@@ -59,6 +60,7 @@ async def register_all_sp_tools(server: FastMCP) -> None:
             keyword_ids=keyword_ids,
             limit=limit,
             resume_from_report_id=resume_from_report_id,
+            timeout_seconds=timeout_seconds,
         )
 
     @server.tool(

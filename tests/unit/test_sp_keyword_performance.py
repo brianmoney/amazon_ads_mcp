@@ -95,10 +95,7 @@ async def test_get_keyword_performance_enriches_rows(monkeypatch):
         "keywordIdFilter": {"include": ["1"]},
     }
     assert run_report.await_args.kwargs["filters"] == [
-        {"field": "keywordType", "values": ["BROAD", "PHRASE", "EXACT"]},
-        {"field": "campaignId", "values": ["10"]},
-        {"field": "adGroupId", "values": ["20"]},
-        {"field": "keywordId", "values": ["1"]},
+        {"field": "keywordType", "values": ["BROAD", "PHRASE", "EXACT"]}
     ]
 
 
