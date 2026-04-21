@@ -13,7 +13,10 @@ from .common import (
     parse_number,
     require_sp_context,
 )
-from .report_helper import run_sp_report
+from .report_helper import resume_sp_report, run_sp_report
+
+
+DEFAULT_SEARCH_TERM_TIMEOUT_SECONDS = 120.0
 
 
 SEARCH_TERM_REPORT_COLUMNS = [
@@ -106,6 +109,8 @@ async def get_search_term_report(
     end_date: str,
     campaign_ids: list[str] | None = None,
     limit: int = 100,
+    resume_from_report_id: str | None = None,
+    timeout_seconds: float = DEFAULT_SEARCH_TERM_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     """Return normalized search-term rows with targeting annotations."""
     auth_manager, profile_id, region = require_sp_context()
@@ -116,15 +121,19 @@ async def get_search_term_report(
     if normalized_campaign_ids:
         filters.append({"field": "campaignId", "values": normalized_campaign_ids})
 
-    report = await run_sp_report(
-        report_type_id="spSearchTerm",
-        start_date=start_date,
-        end_date=end_date,
-        group_by=["searchTerm"],
-        columns=SEARCH_TERM_REPORT_COLUMNS,
-        filters=filters,
-        client=client,
-    )
+    if resume_from_report_id:
+        report = await resume_sp_report(resume_from_report_id, client=client)
+    else:
+        report = await run_sp_report(
+            report_type_id="spSearchTerm",
+            start_date=start_date,
+            end_date=end_date,
+            group_by=["searchTerm"],
+            columns=SEARCH_TERM_REPORT_COLUMNS,
+            filters=filters,
+            timeout_seconds=timeout_seconds,
+            client=client,
+        )
 
     report_campaign_ids = {
         str(row.get("campaignId"))
@@ -156,6 +165,7 @@ async def get_search_term_report(
         "filters": {
             "campaign_ids": target_campaign_ids,
             "limit": bounded_limit,
+            "resume_from_report_id": resume_from_report_id,
         },
         "rows": rows,
         "returned_count": len(rows),

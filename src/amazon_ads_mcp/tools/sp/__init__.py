@@ -12,6 +12,7 @@ from .keyword_performance import get_keyword_performance
 from .list_campaigns import list_campaigns
 from .negate_keywords import negate_keywords
 from .pause_keywords import pause_keywords
+from .report_status import get_sp_report_status
 from .search_term_report import get_search_term_report
 
 
@@ -48,6 +49,7 @@ async def register_all_sp_tools(server: FastMCP) -> None:
         ad_group_ids: Optional[list[str]] = None,
         keyword_ids: Optional[list[str]] = None,
         limit: int = 100,
+        resume_from_report_id: Optional[str] = None,
     ) -> dict:
         return await get_keyword_performance(
             start_date=start_date,
@@ -56,6 +58,7 @@ async def register_all_sp_tools(server: FastMCP) -> None:
             ad_group_ids=ad_group_ids,
             keyword_ids=keyword_ids,
             limit=limit,
+            resume_from_report_id=resume_from_report_id,
         )
 
     @server.tool(
@@ -68,13 +71,24 @@ async def register_all_sp_tools(server: FastMCP) -> None:
         end_date: str,
         campaign_ids: Optional[list[str]] = None,
         limit: int = 100,
+        resume_from_report_id: Optional[str] = None,
+        timeout_seconds: float = 120.0,
     ) -> dict:
         return await get_search_term_report(
             start_date=start_date,
             end_date=end_date,
             campaign_ids=campaign_ids,
             limit=limit,
+            resume_from_report_id=resume_from_report_id,
+            timeout_seconds=timeout_seconds,
         )
+
+    @server.tool(
+        name="sp_report_status",
+        description="Check Sponsored Products report lifecycle status for a known report ID",
+    )
+    async def sp_report_status_tool(ctx: Context, report_id: str) -> dict:
+        return await get_sp_report_status(report_id=report_id)
 
     @server.tool(
         name="adjust_keyword_bids",
