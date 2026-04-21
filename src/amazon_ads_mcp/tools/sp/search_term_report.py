@@ -26,12 +26,13 @@ SEARCH_TERM_REPORT_COLUMNS = [
     "adGroupName",
     "searchTerm",
     "keywordId",
+    "keyword",
     "matchType",
     "impressions",
     "clicks",
     "cost",
     "sales14d",
-    "orders14d",
+    "purchases14d",
 ]
 
 
@@ -91,7 +92,7 @@ def _normalize_search_term_row(
         "clicks": parse_number(row.get("clicks")),
         "spend": parse_number(row.get("cost")),
         "sales": parse_number(row.get("sales14d")),
-        "orders": parse_number(row.get("orders14d")),
+        "orders": parse_number(row.get("orders14d") or row.get("purchases14d")),
         "manually_targeted": bool(manual_matches),
         "manual_target_ids": [str(item.get("targetId", "")) for item in manual_matches],
         "negated": bool(negative_matches),
@@ -117,10 +118,6 @@ async def get_search_term_report(
     client = await get_sp_client(auth_manager)
 
     normalized_campaign_ids = normalize_id_list(campaign_ids)
-    filters = []
-    if normalized_campaign_ids:
-        filters.append({"field": "campaignId", "values": normalized_campaign_ids})
-
     if resume_from_report_id:
         report = await resume_sp_report(resume_from_report_id, client=client)
     else:
@@ -130,7 +127,7 @@ async def get_search_term_report(
             end_date=end_date,
             group_by=["searchTerm"],
             columns=SEARCH_TERM_REPORT_COLUMNS,
-            filters=filters,
+            filters=[],
             timeout_seconds=timeout_seconds,
             client=client,
         )
@@ -140,6 +137,12 @@ async def get_search_term_report(
         for row in report["rows"]
         if row.get("campaignId") is not None
     }
+    filtered_report_rows = [
+        row
+        for row in report["rows"]
+        if not normalized_campaign_ids
+        or str(row.get("campaignId", "")) in normalized_campaign_ids
+    ]
     target_campaign_ids = normalized_campaign_ids or sorted(report_campaign_ids)
     manual_targets = await _fetch_target_index(
         client, "/sp/targets/list", target_campaign_ids
@@ -153,7 +156,7 @@ async def get_search_term_report(
     bounded_limit = clamp_limit(limit, default=100)
     rows = [
         _normalize_search_term_row(row, manual_targets, negative_targets)
-        for row in report["rows"][:bounded_limit]
+        for row in filtered_report_rows[:bounded_limit]
     ]
 
     return {
