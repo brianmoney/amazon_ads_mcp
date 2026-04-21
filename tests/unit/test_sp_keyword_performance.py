@@ -39,37 +39,34 @@ async def test_get_keyword_performance_enriches_rows(monkeypatch):
     monkeypatch.setattr(
         keyword_module, "get_sp_client", AsyncMock(return_value=fake_client)
     )
-    monkeypatch.setattr(
-        keyword_module,
-        "run_sp_report",
-        AsyncMock(
-            return_value={
-                "report_id": "rpt-1",
-                "rows": [
-                    {
-                        "campaignId": 10,
-                        "campaignName": "Campaign",
-                        "adGroupId": 20,
-                        "adGroupName": "Ad Group",
-                        "keywordId": 1,
-                        "keywordText": "shoes",
-                        "matchType": "BROAD",
-                        "impressions": 100,
-                        "clicks": 10,
-                        "cost": 25,
-                        "sales14d": 200,
-                        "orders14d": 4,
-                    },
-                    {
-                        "campaignId": 99,
-                        "adGroupId": 20,
-                        "keywordId": 2,
-                        "keyword": "ignored",
-                    },
-                ],
-            }
-        ),
+    run_report = AsyncMock(
+        return_value={
+            "report_id": "rpt-1",
+            "rows": [
+                {
+                    "campaignId": 10,
+                    "campaignName": "Campaign",
+                    "adGroupId": 20,
+                    "adGroupName": "Ad Group",
+                    "keywordId": 1,
+                    "keywordText": "shoes",
+                    "matchType": "BROAD",
+                    "impressions": 100,
+                    "clicks": 10,
+                    "cost": 25,
+                    "sales14d": 200,
+                    "orders14d": 4,
+                },
+                {
+                    "campaignId": 99,
+                    "adGroupId": 20,
+                    "keywordId": 2,
+                    "keyword": "ignored",
+                },
+            ],
+        }
     )
+    monkeypatch.setattr(keyword_module, "run_sp_report", run_report)
 
     result = await keyword_module.get_keyword_performance(
         start_date="2026-01-01",
@@ -93,6 +90,9 @@ async def test_get_keyword_performance_enriches_rows(monkeypatch):
         "count": 100,
         "campaignIdFilter": {"include": ["10"]},
     }
+    assert run_report.await_args.kwargs["filters"] == [
+        {"field": "keywordType", "values": ["BROAD", "PHRASE", "EXACT"]}
+    ]
 
 
 @pytest.mark.asyncio
