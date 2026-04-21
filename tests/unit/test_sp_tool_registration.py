@@ -26,6 +26,29 @@ async def test_register_all_sp_tools_exposes_read_tool_names():
     }.issubset(tool_names)
 
 
+@pytest.mark.asyncio
+async def test_register_all_sp_tools_publishes_keyword_resume_input_and_status_tool():
+    server = FastMCP("test")
+
+    await register_all_sp_tools(server)
+
+    keyword_tool = await server.get_tool("get_keyword_performance")
+    status_tool = await server.get_tool("sp_report_status")
+
+    assert "resume_from_report_id" in keyword_tool.parameters["properties"]
+    assert keyword_tool.parameters["properties"]["resume_from_report_id"] == {
+        "anyOf": [{"type": "string"}, {"type": "null"}],
+        "default": None,
+    }
+    assert status_tool is not None
+    assert status_tool.parameters == {
+        "additionalProperties": False,
+        "properties": {"report_id": {"type": "string"}},
+        "required": ["report_id"],
+        "type": "object",
+    }
+
+
 @pytest.fixture
 def builder(monkeypatch):
     fake_auth_manager = SimpleNamespace(provider=None)
@@ -57,3 +80,14 @@ async def test_server_builder_includes_sp_read_tools(builder):
     assert "add_keywords" in tool_names
     assert "negate_keywords" in tool_names
     assert "pause_keywords" in tool_names
+
+
+@pytest.mark.asyncio
+async def test_server_builder_publishes_keyword_resume_input_and_status_tool(builder):
+    server = await builder.build()
+
+    keyword_tool = await server.get_tool("get_keyword_performance")
+    tool_names = {tool.name for tool in await server.list_tools()}
+
+    assert "resume_from_report_id" in keyword_tool.parameters["properties"]
+    assert "sp_report_status" in tool_names

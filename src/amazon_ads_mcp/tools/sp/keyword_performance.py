@@ -140,7 +140,11 @@ async def get_keyword_performance(
     normalized_campaign_ids = normalize_id_list(campaign_ids)
     normalized_ad_group_ids = normalize_id_list(ad_group_ids)
     normalized_keyword_ids = normalize_id_list(keyword_ids)
-    filters = _build_filters([], [], [])
+    filters = _build_filters(
+        normalized_campaign_ids,
+        normalized_ad_group_ids,
+        normalized_keyword_ids,
+    )
 
     if resume_from_report_id:
         report = await resume_sp_report(resume_from_report_id, client=client)
