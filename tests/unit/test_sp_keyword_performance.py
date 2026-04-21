@@ -72,6 +72,8 @@ async def test_get_keyword_performance_enriches_rows(monkeypatch):
         start_date="2026-01-01",
         end_date="2026-01-31",
         campaign_ids=["10"],
+        ad_group_ids=[20],
+        keyword_ids=[1],
     )
 
     row = result["rows"][0]
@@ -87,11 +89,16 @@ async def test_get_keyword_performance_enriches_rows(monkeypatch):
         "Accept": "application/vnd.spKeyword.v3+json",
     }
     assert fake_client.calls[0][1] == {
-        "count": 100,
+        "count": 1,
         "campaignIdFilter": {"include": ["10"]},
+        "adGroupIdFilter": {"include": ["20"]},
+        "keywordIdFilter": {"include": ["1"]},
     }
     assert run_report.await_args.kwargs["filters"] == [
-        {"field": "keywordType", "values": ["BROAD", "PHRASE", "EXACT"]}
+        {"field": "keywordType", "values": ["BROAD", "PHRASE", "EXACT"]},
+        {"field": "campaignId", "values": ["10"]},
+        {"field": "adGroupId", "values": ["20"]},
+        {"field": "keywordId", "values": ["1"]},
     ]
 
 
