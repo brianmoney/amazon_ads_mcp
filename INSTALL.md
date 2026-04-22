@@ -5,8 +5,8 @@
 
 #### Prerequisites:
 - Python 3.10 or higher
-- Amazon Ads API access or Ads API Partner Provider (i.e. Openbridge)
-- (Optional) `uv` for dependency management
+- Amazon Ads API access or an Ads API Partner Provider (e.g. OpenBridge)
+- `uv` for dependency management (recommended)
 
 #### Installation:
 
@@ -23,11 +23,8 @@ cd amazon-ads-mcp
 uv venv
 uv sync
 
-# Run the server (stdio mode for Claude Desktop)
-uv run python -m amazon_ads_mcp.server
-
-# Or run with HTTP transport
-uv run python -m amazon_ads_mcp.server --transport http --port 9080
+# Run the server (HTTP transport)
+uv run python -m amazon_ads_mcp.server.mcp_server --transport http --port 9080
 ```
 
 **Option B: Using pip**
@@ -43,18 +40,15 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Install from pyproject.toml
 pip install .
 
-# Run the server (stdio mode for Claude Desktop)
-python -m amazon_ads_mcp.server
-
-# Or run with HTTP transport
-python -m amazon_ads_mcp.server --transport http --port 9080
+# Run the server (HTTP transport)
+python -m amazon_ads_mcp.server.mcp_server --transport http --port 9080
 ```
 
 ### Path 2: Run with Docker
 
 #### Prerequisites:
 - Docker with the `docker compose` plugin
-- Amazon Ads API access for direct auth, or OpenBridge credentials if you intentionally test that path
+- Amazon Ads API credentials (direct auth) or OpenBridge credentials
 
 #### Installation:
 
@@ -97,7 +91,7 @@ curl http://localhost:9080/health
 docker compose down
 ```
 
-The default `docker-compose.yaml` workflow is source-built and direct-auth first. It publishes host port `9080` to container port `9080`, persists cache data under `/app/.cache`, and persists downloaded artifacts under `/app/data`.
+The default `docker-compose.yaml` workflow is source-built and direct-auth first. It publishes host port `9080` to container port `9080` and persists cache data under `/app/.cache`.
 
 If you want bind mounts instead of named Docker volumes during local development, use:
 
@@ -106,9 +100,9 @@ docker compose -f docker-compose.local.yaml build
 docker compose -f docker-compose.local.yaml up -d
 ```
 
-That local compose file writes cache data to `./.cache` and downloads to `./data`.
+That local compose file writes cache data to `./.cache`.
 
-To intentionally switch Docker testing to OpenBridge, override the auth method and provide OpenBridge credentials:
+To switch Docker testing to OpenBridge, override the auth method and provide OpenBridge credentials:
 
 ```bash
 AUTH_METHOD=openbridge OPENBRIDGE_REFRESH_TOKEN="your-openbridge-token" docker compose up -d
@@ -133,107 +127,109 @@ docker run -d \
 ```
 
 ---
-## 🔐 Authentication
 
+## Authentication
 
+### Direct Amazon Ads OAuth
 
-### 2. Configure Your MCP Server
+Direct auth uses your own Amazon Ads API application (BYOA — Bring Your Own App). You need three credentials: a Client ID, a Client Secret, and a Refresh Token.
 
-Set the following environment variables:
+#### Step 1: Register an Amazon Developer Application
+
+1. Sign in to the [Amazon Developer Console](https://developer.amazon.com/apps-and-games/console)
+2. Create a new application (or use an existing one). This gives you a **Client ID** and **Client Secret** under the **Login with Amazon** section.
+3. Under **Allowed Return URLs**, add your OAuth callback URL. For local use: `http://localhost:9080/auth/callback`
+4. Ensure your application has access to the Amazon Advertising API. If you manage ads for your own accounts, your Amazon Ads account may qualify for [self-service API access](https://advertising.amazon.com/API/docs/en-us/get-started/first-steps). Agencies and tool providers should apply through the [Amazon Ads API Partner Program](https://advertising.amazon.com/API/docs/en-us/get-started/partner-program).
+
+#### Step 2: Configure the Server with Your Client Credentials
+
+Set at minimum the Client ID and Client Secret. The Refresh Token can be obtained via the built-in OAuth flow in the next step.
 
 ```bash
-export AUTH_METHOD="direct"
-export AMAZON_AD_API_CLIENT_ID="your-client-id"
-export AMAZON_AD_API_CLIENT_SECRET="your-client-secret"
-export AMAZON_AD_API_REFRESH_TOKEN="your-refresh-token"
-
-# Region configuration (optional, defaults to "na")
-export AMAZON_ADS_REGION="na"  # Options: na, eu, fe
-
-# Optional callback override for browser-based OAuth testing
-export OAUTH_REDIRECT_URI="http://localhost:9080/auth/callback"
+AUTH_METHOD=direct
+AMAZON_AD_API_CLIENT_ID="amzn1.application-oa2-client.xxxxx"
+AMAZON_AD_API_CLIENT_SECRET="your-client-secret"
+OAUTH_REDIRECT_URI="http://localhost:9080/auth/callback"
 ```
 
+Start the server:
 
-
-The token process follows typical token exchange workflows:
-
-```
-  ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-  │   AI Client     │    │   MCP Server     │    │   OpenBridge    │    │  Amazon Ads     │
-  │  (Claude, GPT)  │    │  (This SDK)      │    │     API         │    │     API         │
-  └────────┬────────┘    └────────┬─────────┘    └─────────┬───────┘    └─────────┬───────┘
-           │                      │                        │                      │
-           │ 1. Request Tool      │                        │                      │
-           ├─────────────────────►│                        │                      │
-           │   (e.g., list        │                        │                      │
-           │    profiles)         │                        │                      │
-           │                      │                        │                      │
-           │                      │ 2. Check Auth          │                      │
-           │                      ├──────┐                 │                      │
-           │                      │      │                 │                      │
-           │                      │◄─────┘                 │                      │
-           │                      │ (needs token)          │                      │
-           │                      │                        │                      │
-           │                      │ 3. Request Bearer      │                      │
-           │                      │    Token               │                      │
-           │                      ├───────────────────────►│                      │
-           │                      │ POST /openbridge/      │                      │
-           │                      │   identities/{id}/     │                      │
-           │                      │   auth/token           │                      │
-           │                      │                        │                      │
-           │                      │                        │ 4. Fetch/Refresh     │
-           │                      │                        │    Amazon Token      │
-           │                      │                        ├─────────────────────►│
-           │                      │                        │  (if needed)         │
-           │                      │                        │                      │
-           │                      │                        │◄─────────────────────┤
-           │                      │                        │  LWA Access Token    │
-           │                      │                        │                      │
-           │                      │◄───────────────────────┤                      │
-           │                      │ 5. Return JWT          │                      │
-           │                      │ {                      │                      │
-           │                      │   "access_token":      │                      │
-           │                      │     "eyJhbGc...",      │                      │
-           │                      │   "expires_in": 3600,  │                      │
-           │                      │   "token_type":"Bearer"│                      │
-           │                      │ }                      │                      │
-           │                      │                        │                      │
-           │                      │ 6. Extract Headers     │                      │
-           │                      ├──────┐                 │                      │
-           │                      │      │ Decode JWT      │                      │
-           │                      │◄─────┘ payload:        │                      │
-           │                      │  - Authorization       │                      │
-           │                      │  - ClientId            │                      │
-           │                      │  - Scope/ProfileId     │                      │
-           │                      │                        │                      │
-           │                      │ 7. Call Amazon Ads API │                      │
-           │                      ├────────────────────────┼─────────────────────►│
-           │                      │ Headers:               │                      │
-           │                      │ - Authorization: Bearer {LWA_token}           │
-           │                      │ - Amazon-Advertising-API-ClientId: {client}   │
-           │                      │ - Amazon-Advertising-API-Scope: {profile}     │
-           │                      │                        │                      │
-           │                      │◄───────────────────────┼──────────────────────┤
-           │                      │ 8. API Response        │                      │
-           │                      │                        │                      │
-           │◄─────────────────────┤                        │                      │
-           │ 9. Return Result     │                        │                      │
-           │                      │                        │                      │
+```bash
+uv run python -m amazon_ads_mcp.server.mcp_server --transport http --port 9080
 ```
 
+#### Step 3: Run the Built-in OAuth Flow to Get a Refresh Token
+
+The easiest way to obtain a Refresh Token is through the built-in `start_oauth_flow` MCP tool. Connect an MCP client (e.g. Claude Desktop) and ask it to run the tool:
+
+```
+Use the start_oauth_flow tool to authenticate with Amazon Ads
+```
+
+The tool generates an authorization URL and opens your browser. After you sign in and approve access, Amazon redirects to your callback URL. The server automatically exchanges the authorization code for tokens and stores them. The Refresh Token is persisted if `AMAZON_ADS_TOKEN_PERSIST=true`.
+
+You can check status and refresh tokens manually using:
+- `check_oauth_status` — verify the current auth state
+- `refresh_oauth_token` — force a token refresh
+- `clear_oauth_tokens` — remove stored tokens
+
+#### Step 4: Set the Environment Variable (if bypassing the OAuth flow)
+
+If you already have a Refresh Token from a previous authorization grant:
+
+```bash
+AMAZON_AD_API_REFRESH_TOKEN="Atzr|IwEB..."
+```
+
+The server will use this token directly on startup without requiring the OAuth flow. Note that Refresh Tokens expire if unused and must be re-obtained through the OAuth flow when that happens.
+
+#### Optional Settings
+
+```bash
+# Set a default profile to avoid selecting one on each startup
+AMAZON_AD_API_PROFILE_ID="1234567890"
+
+# Region (na = North America, eu = Europe, fe = Far East)
+AMAZON_ADS_REGION="na"
+
+# Enable sandbox mode for testing (no real API charges)
+AMAZON_ADS_SANDBOX_MODE=true
+
+# Persist tokens to disk (encrypted; required to survive server restarts)
+AMAZON_ADS_TOKEN_PERSIST=true
+```
+
+---
+
+### OpenBridge
+
+[OpenBridge](https://openbridge.com) is a multi-tenant identity broker for Amazon Ads. Use this auth method when your advertising accounts are managed through OpenBridge — you provide an OpenBridge Refresh Token instead of managing Amazon OAuth credentials yourself.
+
+How it works:
+1. The server exchanges your OpenBridge Refresh Token for a short-lived JWT via the OpenBridge auth API
+2. That JWT is used to list your Amazon Ads remote identities (accounts)
+3. Per-identity Amazon Ads bearer tokens are fetched on demand
+4. Region routing is identity-controlled — each identity carries its own region
+
+```bash
+AUTH_METHOD=openbridge
+OPENBRIDGE_REFRESH_TOKEN="your-openbridge-refresh-token"
+```
+
+`OPENBRIDGE_API_KEY` is accepted as a legacy alias for `OPENBRIDGE_REFRESH_TOKEN`.
+
+In gateway or proxy deployments, the token can be passed per-request via the `X-Openbridge-Token` header (preferred) or `Authorization: Bearer` header rather than being set in the environment.
+
+After the server starts, use `list_identities` to see available Amazon Ads accounts and `set_active_identity` to select one.
+
+---
 
 ### Token Persistence
 
-> **🔒 Security**: Token persistence is **disabled by default**. When enabled, tokens are **encrypted** using Fernet symmetric encryption (AES-128).
+Token persistence is **disabled by default**. When enabled, tokens are **encrypted** using Fernet symmetric encryption (AES-128).
 
-- **Disabled by default** - Tokens are kept in memory only (requires re-authentication on restart)
-- **To enable persistence**: Set `AMAZON_ADS_TOKEN_PERSIST=true`
-- **Encryption**: Tokens are encrypted at rest using:
-  - Fernet symmetric encryption (requires `cryptography` library)
-  - Machine-specific key derivation (PBKDF2-HMAC-SHA256)
-  - Optional custom key via `AMAZON_ADS_ENCRYPTION_KEY` environment variable
-- **Storage location** (when enabled):
+- **To enable**: Set `AMAZON_ADS_TOKEN_PERSIST=true`
+- **Storage location**:
   - Docker: `/app/.cache/amazon-ads-mcp/tokens.json`
   - Local: `~/.amazon-ads-mcp/tokens.json`
 - **Custom cache directory**: Set `AMAZON_ADS_CACHE_DIR=/path/to/cache`
@@ -241,16 +237,16 @@ The token process follows typical token exchange workflows:
 **Security Requirements**:
 
 For **Development/Local**:
-- Machine-specific keys are automatically generated (convenience only)
+- Machine-specific keys are automatically generated
 - Install `cryptography`: `pip install cryptography`
 
 For **Production**:
-- **REQUIRED**: Set `AMAZON_ADS_ENCRYPTION_KEY` with a secure key
+- **Required**: Set `AMAZON_ADS_ENCRYPTION_KEY` with a secure key
 - Generate a key: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 - Store the key securely (AWS Secrets Manager, HashiCorp Vault, etc.)
 - Never commit encryption keys to version control
 
 **Security Controls**:
-- Missing `cryptography` library will **refuse** to persist tokens unless `AMAZON_ADS_ALLOW_PLAINTEXT_PERSIST=true` (not recommended)
+- Missing `cryptography` library will refuse to persist tokens unless `AMAZON_ADS_ALLOW_PLAINTEXT_PERSIST=true` (not recommended)
 - Invalid encryption keys trigger warnings and fallback to machine-derived keys
 - Production environments (`ENV=production`) issue warnings when using machine-derived keys
