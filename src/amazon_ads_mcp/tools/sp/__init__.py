@@ -65,7 +65,7 @@ async def register_all_sp_tools(server: FastMCP) -> None:
 
     @server.tool(
         name="get_impression_share_report",
-        description="Get Sponsored Products impression share with explicit availability diagnostics",
+        description="Get Sponsored Products top-of-search impression share with explicit availability diagnostics",
     )
     async def get_impression_share_report_tool(
         ctx: Context,
