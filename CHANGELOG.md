@@ -9,18 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Purpose-built Sponsored Products tools: `list_campaigns`, `get_keyword_performance`,
-  `get_placement_report`, `get_search_term_report`, `sp_report_status`, `adjust_keyword_bids`, `add_keywords`,
-  `negate_keywords`, `pause_keywords`, `update_campaign_budget`
+  `get_placement_report`, `get_search_term_report`, `get_campaign_budget_history`, `sp_report_status`,
+  `adjust_keyword_bids`, `add_keywords`, `negate_keywords`, `pause_keywords`, `update_campaign_budget`
 - Shared async report lifecycle helper (`report_helper.py`) used by SP read tools
 - Report resumability: `resume_from_report_id` parameter on `get_keyword_performance` and
-  `get_search_term_report` to restart polling from a known report ID
+  `get_placement_report`, `get_search_term_report`, and `get_campaign_budget_history` to restart polling from a known report ID
 - `sp_report_status` tool for checking the lifecycle state of an in-progress report
 - Workflow prompts: `sp_bid_optimization` and `sp_search_term_harvesting`
 - Clean `ServerBuilder` class with explicit SP tool registration hook
 - Docker direct-auth workflow: source-built compose, `.env.example` with direct-auth defaults
 
 ### Changed
-- Replaced generated OpenAPI tool catalog with 9 purpose-built Sponsored Products tools
+- Replaced generated OpenAPI tool catalog with 11 purpose-built Sponsored Products tools
 - Rewrote `server_builder.py` as a clean `ServerBuilder` class
 - Bounded SP report polling: non-zero initial interval, exponential backoff with jitter
 - Raised `get_search_term_report` default timeout to 120 seconds
