@@ -12,6 +12,7 @@ from .keyword_performance import get_keyword_performance
 from .list_campaigns import list_campaigns
 from .negate_keywords import negate_keywords
 from .pause_keywords import pause_keywords
+from .placement_report import get_placement_report
 from .report_status import get_sp_report_status
 from .search_term_report import get_search_term_report
 from .update_campaign_budget import update_campaign_budget
@@ -59,6 +60,28 @@ async def register_all_sp_tools(server: FastMCP) -> None:
             campaign_ids=campaign_ids,
             ad_group_ids=ad_group_ids,
             keyword_ids=keyword_ids,
+            limit=limit,
+            resume_from_report_id=resume_from_report_id,
+            timeout_seconds=timeout_seconds,
+        )
+
+    @server.tool(
+        name="get_placement_report",
+        description="Get Sponsored Products placement performance with current placement multipliers",
+    )
+    async def get_placement_report_tool(
+        ctx: Context,
+        start_date: str,
+        end_date: str,
+        campaign_ids: Optional[list[str]] = None,
+        limit: int = 100,
+        resume_from_report_id: Optional[str] = None,
+        timeout_seconds: float = 120.0,
+    ) -> dict:
+        return await get_placement_report(
+            start_date=start_date,
+            end_date=end_date,
+            campaign_ids=campaign_ids,
             limit=limit,
             resume_from_report_id=resume_from_report_id,
             timeout_seconds=timeout_seconds,

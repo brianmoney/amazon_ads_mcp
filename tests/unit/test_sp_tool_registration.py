@@ -17,6 +17,7 @@ async def test_register_all_sp_tools_exposes_read_tool_names():
     assert {
         "list_campaigns",
         "get_keyword_performance",
+        "get_placement_report",
         "get_search_term_report",
         "sp_report_status",
         "adjust_keyword_bids",
@@ -50,6 +51,21 @@ async def test_register_all_sp_tools_publishes_keyword_resume_input_and_status_t
     }
 
 
+@pytest.mark.asyncio
+async def test_register_all_sp_tools_publishes_placement_resume_input():
+    server = FastMCP("test")
+
+    await register_all_sp_tools(server)
+
+    placement_tool = await server.get_tool("get_placement_report")
+
+    assert "resume_from_report_id" in placement_tool.parameters["properties"]
+    assert placement_tool.parameters["properties"]["resume_from_report_id"] == {
+        "anyOf": [{"type": "string"}, {"type": "null"}],
+        "default": None,
+    }
+
+
 @pytest.fixture
 def builder(monkeypatch):
     fake_auth_manager = SimpleNamespace(provider=None)
@@ -75,6 +91,7 @@ async def test_server_builder_includes_sp_read_tools(builder):
     tool_names = {tool.name for tool in await server.list_tools()}
     assert "list_campaigns" in tool_names
     assert "get_keyword_performance" in tool_names
+    assert "get_placement_report" in tool_names
     assert "get_search_term_report" in tool_names
     assert "sp_report_status" in tool_names
     assert "adjust_keyword_bids" in tool_names
@@ -93,3 +110,12 @@ async def test_server_builder_publishes_keyword_resume_input_and_status_tool(bui
 
     assert "resume_from_report_id" in keyword_tool.parameters["properties"]
     assert "sp_report_status" in tool_names
+
+
+@pytest.mark.asyncio
+async def test_server_builder_publishes_placement_resume_input(builder):
+    server = await builder.build()
+
+    placement_tool = await server.get_tool("get_placement_report")
+
+    assert "resume_from_report_id" in placement_tool.parameters["properties"]

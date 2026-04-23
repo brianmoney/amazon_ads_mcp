@@ -8,6 +8,7 @@ Amazon Ads MCP is a Python MCP server that provides Amazon Ads authentication, p
 
 - `list_campaigns` — List SP campaigns with nested ad groups
 - `get_keyword_performance` — Async keyword performance report with derived metrics (ACOS, ROAS, CPC, CTR)
+- `get_placement_report` — Async placement performance report with current top-of-search and product-page multipliers
 - `get_search_term_report` — Async search term report with manual/negative keyword context
 - `sp_report_status` — Check the lifecycle status of an in-progress report by ID
 - `adjust_keyword_bids` — Batch bid updates with before/after audit trail

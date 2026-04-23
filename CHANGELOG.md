@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Purpose-built Sponsored Products tools: `list_campaigns`, `get_keyword_performance`,
-  `get_search_term_report`, `sp_report_status`, `adjust_keyword_bids`, `add_keywords`,
+  `get_placement_report`, `get_search_term_report`, `sp_report_status`, `adjust_keyword_bids`, `add_keywords`,
   `negate_keywords`, `pause_keywords`, `update_campaign_budget`
 - Shared async report lifecycle helper (`report_helper.py`) used by SP read tools
 - Report resumability: `resume_from_report_id` parameter on `get_keyword_performance` and
