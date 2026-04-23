@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from .common import parse_number
+from .common import extract_campaign_budget
 from .write_common import (
     build_mutation_response,
     build_result,
@@ -21,7 +21,7 @@ from .write_common import (
 
 def _observed_daily_budget(campaign: dict[str, Any]) -> float | None:
     """Return the current campaign daily budget from common API field variants."""
-    return parse_number(campaign.get("dailyBudget")) or parse_number(campaign.get("budget"))
+    return extract_campaign_budget(campaign)
 
 
 def _error_message_from_http_error(exc: httpx.HTTPError) -> str:

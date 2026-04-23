@@ -86,6 +86,10 @@ async def test_update_campaign_budget_returns_applied_result(monkeypatch):
             "resulting_daily_budget": 25.0,
         }
     ]
+    assert fake_client.post_calls[0][1] == {
+        "campaignIdFilter": {"include": ["cmp-1"]},
+        "count": 1,
+    }
     assert fake_client.put_calls[0][1] == {"dailyBudget": 25.0}
 
 
@@ -159,3 +163,39 @@ async def test_update_campaign_budget_returns_failed_result_for_api_rejection(mo
             "error": "Campaign is archived",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_update_campaign_budget_skips_nested_budget_noop_requests(monkeypatch):
+    fake_client = FakeClient(
+        list_payload={
+            "campaigns": [
+                {
+                    "campaignId": "cmp-1",
+                    "budget": {"budget": 25.0, "budgetType": "DAILY"},
+                }
+            ]
+        }
+    )
+
+    async def fake_context():
+        return object(), "profile-1", "na", fake_client
+
+    monkeypatch.setattr(budget_module, "get_sp_write_context", fake_context)
+
+    result = await budget_module.update_campaign_budget("cmp-1", 25.0)
+
+    assert result["applied_count"] == 0
+    assert result["skipped_count"] == 1
+    assert result["failed_count"] == 0
+    assert result["results"] == [
+        {
+            "outcome": "skipped",
+            "status": "ALREADY_SET",
+            "campaign_id": "cmp-1",
+            "requested_daily_budget": 25.0,
+            "previous_daily_budget": 25.0,
+            "resulting_daily_budget": 25.0,
+        }
+    ]
+    assert fake_client.put_calls == []

@@ -398,7 +398,7 @@ async def list_campaigns_for_write(
 ) -> list[dict[str, Any]]:
     """List Sponsored Products campaigns for write-tool preflight checks."""
     payload = {
-        "campaignIdFilter": normalize_id_list(campaign_ids),
+        "campaignIdFilter": include_filter(campaign_ids),
         "count": max(len(campaign_ids), 1),
     }
     response = await sp_post(client, "/sp/campaigns/list", payload, SP_CAMPAIGN_MEDIA_TYPE)

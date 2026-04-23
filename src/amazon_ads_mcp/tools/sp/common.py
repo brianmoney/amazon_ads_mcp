@@ -134,6 +134,36 @@ def parse_number(value: Any) -> float | None:
         return None
 
 
+def extract_campaign_budget(campaign: dict[str, Any]) -> float | None:
+    """Return a campaign daily budget from scalar or nested API shapes."""
+    daily_budget = parse_number(campaign.get("dailyBudget"))
+    if daily_budget is not None:
+        return daily_budget
+
+    budget = campaign.get("budget")
+    if isinstance(budget, dict):
+        return parse_number(budget.get("budget")) or parse_number(
+            budget.get("dailyBudget")
+        )
+
+    return parse_number(budget)
+
+
+def extract_campaign_budget_type(campaign: dict[str, Any]) -> str | None:
+    """Return a campaign budget type from scalar or nested API shapes."""
+    budget_type = campaign.get("budgetType")
+    if isinstance(budget_type, str) and budget_type.strip():
+        return budget_type
+
+    budget = campaign.get("budget")
+    if isinstance(budget, dict):
+        nested_budget_type = budget.get("budgetType")
+        if isinstance(nested_budget_type, str) and nested_budget_type.strip():
+            return nested_budget_type
+
+    return None
+
+
 def safe_divide(numerator: Any, denominator: Any) -> float | None:
     """Return a stable ratio or ``None`` when the inputs are unusable."""
     left = parse_number(numerator)

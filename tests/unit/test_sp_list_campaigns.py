@@ -37,13 +37,13 @@ class FakeClient:
                             "campaignId": 10,
                             "name": "Campaign A",
                             "state": "ENABLED",
-                            "budget": 25,
+                            "budget": {"budget": 25, "budgetType": "DAILY"},
                         },
                         {
                             "campaignId": 11,
                             "name": "Campaign B",
                             "state": "PAUSED",
-                            "budget": 15,
+                            "budget": {"budget": 15, "budgetType": "DAILY"},
                         },
                     ]
                 }
@@ -95,13 +95,17 @@ async def test_list_campaigns_returns_campaign_hierarchy(monkeypatch):
     assert result["region"] == "na"
     assert result["returned_count"] == 2
     assert result["campaigns"][0]["campaign_id"] == "10"
+    assert result["campaigns"][0]["budget"] == 25.0
+    assert result["campaigns"][0]["budget_type"] == "DAILY"
+    assert result["campaigns"][1]["budget"] == 15.0
+    assert result["campaigns"][1]["budget_type"] == "DAILY"
     assert len(result["campaigns"][0]["ad_groups"]) == 2
     assert result["campaigns"][1]["ad_groups"] == []
     assert fake_client.calls[0][1] == {
         "count": 2,
         "startIndex": 5,
         "stateFilter": ["ENABLED"],
-        "campaignIdFilter": ["10", "11"],
+        "campaignIdFilter": {"include": ["10", "11"]},
     }
     assert fake_client.calls[0][2] == {
         "Content-Type": "application/vnd.spCampaign.v3+json",
