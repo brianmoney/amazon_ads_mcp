@@ -18,8 +18,7 @@ from ..sp.common import (
     safe_divide,
 )
 
-SD_CAMPAIGN_MEDIA_TYPE = "application/vnd.sdcampaign.v3+json"
-SD_TARGETING_GROUP_MEDIA_TYPE = "application/vnd.sdtargetinggroup.v3+json"
+SD_QUERY_CONTENT_TYPE = "application/json"
 
 
 class SDContextError(RuntimeError):
@@ -58,7 +57,7 @@ async def get_sd_client(auth_manager=None):
 
 
 def media_headers(media_type: str) -> dict[str, str]:
-    """Return explicit vendor media headers for Sponsored Display requests."""
+    """Return explicit headers for Sponsored Display requests."""
     return {"Content-Type": media_type, "Accept": media_type}
 
 
@@ -74,8 +73,7 @@ async def sd_post(
 
 __all__ = [
     "SDContextError",
-    "SD_CAMPAIGN_MEDIA_TYPE",
-    "SD_TARGETING_GROUP_MEDIA_TYPE",
+    "SD_QUERY_CONTENT_TYPE",
     "clamp_limit",
     "clamp_offset",
     "extract_campaign_budget",
