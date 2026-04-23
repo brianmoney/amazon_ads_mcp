@@ -9,6 +9,7 @@ from fastmcp import Context, FastMCP
 from .add_keywords import add_keywords
 from .adjust_keyword_bids import adjust_keyword_bids
 from .campaign_budget_history import get_campaign_budget_history
+from .impression_share import get_impression_share_report
 from .keyword_performance import get_keyword_performance
 from .list_campaigns import list_campaigns
 from .negate_keywords import negate_keywords
@@ -57,6 +58,32 @@ async def register_all_sp_tools(server: FastMCP) -> None:
             start_date=start_date,
             end_date=end_date,
             campaign_ids=campaign_ids,
+            limit=limit,
+            resume_from_report_id=resume_from_report_id,
+            timeout_seconds=timeout_seconds,
+        )
+
+    @server.tool(
+        name="get_impression_share_report",
+        description="Get Sponsored Products impression share with explicit availability diagnostics",
+    )
+    async def get_impression_share_report_tool(
+        ctx: Context,
+        start_date: str,
+        end_date: str,
+        campaign_ids: Optional[list[str]] = None,
+        ad_group_ids: Optional[list[str]] = None,
+        keyword_ids: Optional[list[str]] = None,
+        limit: int = 100,
+        resume_from_report_id: Optional[str] = None,
+        timeout_seconds: float = 120.0,
+    ) -> dict:
+        return await get_impression_share_report(
+            start_date=start_date,
+            end_date=end_date,
+            campaign_ids=campaign_ids,
+            ad_group_ids=ad_group_ids,
+            keyword_ids=keyword_ids,
             limit=limit,
             resume_from_report_id=resume_from_report_id,
             timeout_seconds=timeout_seconds,
