@@ -24,28 +24,27 @@ async def test_get_sd_performance_returns_normalized_rows(monkeypatch):
                 {
                     "campaignId": 10,
                     "campaignName": "Conversions",
-                    "targetingGroupId": 20,
-                    "targetingGroupName": "Viewed PDP",
+                    "adGroupId": 20,
+                    "adGroupName": "Viewed PDP",
                     "campaignObjective": "CONVERSIONS",
                     "biddingModel": "CPC",
                     "impressions": 1000,
                     "clicks": 50,
                     "cost": 125,
-                    "sales14d": 500,
-                    "purchases14d": 10,
+                    "sales": 500,
+                    "purchases": 10,
                 },
                 {
                     "campaignId": 11,
                     "campaignName": "Reach",
-                    "targetingGroupId": 21,
+                    "adGroupId": 21,
                     "campaignObjective": "REACH",
-                    "biddingModel": "VCPM",
                     "impressions": 5000,
-                    "viewableImpressions": 4000,
+                    "impressionsViews": 4000,
                     "clicks": 5,
                     "cost": 24,
-                    "sales14d": 0,
-                    "purchases14d": 0,
+                    "sales": 0,
+                    "purchases": 0,
                 },
             ],
         }
@@ -73,8 +72,8 @@ async def test_get_sd_performance_returns_normalized_rows(monkeypatch):
     assert run_report.await_args.kwargs["filters"] == [
         {"field": "campaignObjective", "values": ["CONVERSIONS", "REACH"]}
     ]
-    assert run_report.await_args.kwargs["report_type_id"] == "sdAdvertisedProduct"
-    assert run_report.await_args.kwargs["group_by"] == ["advertiser"]
+    assert run_report.await_args.kwargs["report_type_id"] == "sdAdGroup"
+    assert run_report.await_args.kwargs["group_by"] == ["adGroup"]
 
 
 @pytest.mark.asyncio
@@ -96,13 +95,13 @@ async def test_get_sd_performance_preserves_sparse_optional_fields(monkeypatch):
                 "rows": [
                     {
                         "campaignId": 10,
-                        "targetingGroupId": 20,
+                        "adGroupId": 20,
                         "campaignObjective": "CONSIDERATION",
                         "impressions": 0,
                         "clicks": 0,
                         "cost": None,
-                        "sales14d": None,
-                        "purchases14d": None,
+                        "sales": None,
+                        "purchases": None,
                     }
                 ],
             }
@@ -137,7 +136,7 @@ async def test_get_sd_performance_resumes_completed_report(monkeypatch):
     resume_report = AsyncMock(
         return_value={
             "report_id": "sd-rpt-resume",
-            "rows": [{"campaignId": 10, "targetingGroupId": 20}],
+            "rows": [{"campaignId": 10, "adGroupId": 20}],
         }
     )
     monkeypatch.setattr(performance_module, "run_sd_report", run_report)

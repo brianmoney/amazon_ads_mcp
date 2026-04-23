@@ -50,11 +50,11 @@ async def test_create_sd_report_uses_documented_reporting_contract():
     client = FakeReportClient([FakeResponse(json_data={"reportId": "sd-rpt-1"})])
 
     result = await create_sd_report(
-        report_type_id="sdAdvertisedProduct",
+        report_type_id="sdAdGroup",
         start_date="2026-01-01",
         end_date="2026-01-31",
-        group_by=["advertiser"],
-        columns=["campaignId", "campaignObjective"],
+        group_by=["adGroup"],
+        columns=["impressions", "clicks", "cost", "campaignId", "adGroupId"],
         filters=[{"field": "campaignObjective", "values": ["REACH"]}],
         client=client,
     )
@@ -67,9 +67,9 @@ async def test_create_sd_report_uses_documented_reporting_contract():
         "endDate": "2026-01-31",
         "configuration": {
             "adProduct": "SPONSORED_DISPLAY",
-            "reportTypeId": "sdAdvertisedProduct",
-            "groupBy": ["advertiser"],
-            "columns": ["campaignId", "campaignObjective"],
+            "reportTypeId": "sdAdGroup",
+            "groupBy": ["adGroup"],
+            "columns": ["impressions", "clicks", "cost", "campaignId", "adGroupId"],
             "format": "GZIP_JSON",
             "timeUnit": "SUMMARY",
             "filters": [{"field": "campaignObjective", "values": ["REACH"]}],

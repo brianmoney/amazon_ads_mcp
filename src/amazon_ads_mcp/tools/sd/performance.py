@@ -21,29 +21,28 @@ from .common import (
 from .report_helper import resume_sd_report, run_sd_report
 
 DEFAULT_SD_PERFORMANCE_TIMEOUT_SECONDS = 120.0
-SD_REPORT_TYPE_ID = "sdAdvertisedProduct"
+SD_REPORT_TYPE_ID = "sdAdGroup"
+SD_REPORT_GROUP_BY = ["adGroup"]
 SD_PERFORMANCE_REPORT_COLUMNS = [
-    "campaignId",
-    "campaignName",
-    "targetingGroupId",
-    "targetingGroupName",
-    "campaignObjective",
-    "biddingModel",
     "impressions",
-    "viewableImpressions",
     "clicks",
     "cost",
-    "sales14d",
-    "purchases14d",
+    "campaignId",
+    "campaignName",
+    "adGroupId",
+    "adGroupName",
+    "sales",
+    "purchases",
+    "impressionsViews",
 ]
 _OBJECTIVE_KEYS = ("campaignObjective", "objective")
 _BIDDING_MODEL_KEYS = ("biddingModel", "costType")
 _TARGETING_GROUP_ID_KEYS = ("targetingGroupId", "adGroupId")
-_TARGETING_GROUP_NAME_KEYS = ("targetingGroupName", "name")
+_TARGETING_GROUP_NAME_KEYS = ("targetingGroupName", "adGroupName", "name")
 _IMPRESSIONS_KEYS = ("impressions",)
-_VIEWABLE_IMPRESSIONS_KEYS = ("viewableImpressions",)
+_VIEWABLE_IMPRESSIONS_KEYS = ("viewableImpressions", "impressionsViews")
 _SALES_KEYS = ("sales14d", "sales")
-_ORDERS_KEYS = ("orders14d", "purchases14d", "orders")
+_ORDERS_KEYS = ("orders14d", "purchases14d", "purchases", "orders")
 
 
 def _validate_report_window(start_date: str, end_date: str) -> None:
@@ -121,6 +120,8 @@ def _normalize_performance_row(row: dict[str, Any]) -> SDPerformanceRow:
         str(objective) if objective is not None else None,
         str(bidding_model) if bidding_model is not None else None,
     )
+    if not vcpm_backed and viewable_impressions not in (None, 0.0):
+        vcpm_backed = True
     targeting_group_id = _first_present_value(row, _TARGETING_GROUP_ID_KEYS)
 
     return SDPerformanceRow(
@@ -186,7 +187,7 @@ async def get_sd_performance(
             report_type_id=SD_REPORT_TYPE_ID,
             start_date=request.start_date,
             end_date=request.end_date,
-            group_by=["advertiser"],
+            group_by=SD_REPORT_GROUP_BY,
             columns=SD_PERFORMANCE_REPORT_COLUMNS,
             filters=report_filters,
             timeout_seconds=request.timeout_seconds,
