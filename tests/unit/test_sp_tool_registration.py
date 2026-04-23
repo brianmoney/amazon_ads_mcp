@@ -23,6 +23,7 @@ async def test_register_all_sp_tools_exposes_read_tool_names():
         "add_keywords",
         "negate_keywords",
         "pause_keywords",
+        "update_campaign_budget",
     }.issubset(tool_names)
 
 
@@ -80,6 +81,7 @@ async def test_server_builder_includes_sp_read_tools(builder):
     assert "add_keywords" in tool_names
     assert "negate_keywords" in tool_names
     assert "pause_keywords" in tool_names
+    assert "update_campaign_budget" in tool_names
 
 
 @pytest.mark.asyncio

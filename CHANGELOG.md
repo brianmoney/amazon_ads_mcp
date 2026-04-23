@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Purpose-built Sponsored Products tools: `list_campaigns`, `get_keyword_performance`,
   `get_search_term_report`, `sp_report_status`, `adjust_keyword_bids`, `add_keywords`,
-  `negate_keywords`, `pause_keywords`
+  `negate_keywords`, `pause_keywords`, `update_campaign_budget`
 - Shared async report lifecycle helper (`report_helper.py`) used by SP read tools
 - Report resumability: `resume_from_report_id` parameter on `get_keyword_performance` and
   `get_search_term_report` to restart polling from a known report ID
@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker direct-auth workflow: source-built compose, `.env.example` with direct-auth defaults
 
 ### Changed
-- Replaced generated OpenAPI tool catalog with 8 purpose-built Sponsored Products tools
+- Replaced generated OpenAPI tool catalog with 9 purpose-built Sponsored Products tools
 - Rewrote `server_builder.py` as a clean `ServerBuilder` class
 - Bounded SP report polling: non-zero initial interval, exponential backoff with jitter
 - Raised `get_search_term_report` default timeout to 120 seconds

@@ -14,6 +14,7 @@ Amazon Ads MCP is a Python MCP server that provides Amazon Ads authentication, p
 - `add_keywords` — Add SP keywords with duplicate detection
 - `negate_keywords` — Add negative exact keywords to a campaign or ad group
 - `pause_keywords` — Pause SP keywords with no-op detection
+- `update_campaign_budget` — Update one SP campaign daily budget with no-op detection and audit context
 
 ### Profile and Region Management
 

@@ -14,6 +14,7 @@ from .negate_keywords import negate_keywords
 from .pause_keywords import pause_keywords
 from .report_status import get_sp_report_status
 from .search_term_report import get_search_term_report
+from .update_campaign_budget import update_campaign_budget
 
 
 async def register_all_sp_tools(server: FastMCP) -> None:
@@ -144,3 +145,17 @@ async def register_all_sp_tools(server: FastMCP) -> None:
         reason: Optional[str] = None,
     ) -> dict:
         return await pause_keywords(keyword_ids=keyword_ids, reason=reason)
+
+    @server.tool(
+        name="update_campaign_budget",
+        description="Update a Sponsored Products campaign daily budget with audit details",
+    )
+    async def update_campaign_budget_tool(
+        ctx: Context,
+        campaign_id: str,
+        daily_budget: float,
+    ) -> dict:
+        return await update_campaign_budget(
+            campaign_id=campaign_id,
+            daily_budget=daily_budget,
+        )
