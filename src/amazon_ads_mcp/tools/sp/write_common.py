@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Iterator, Sequence
 
 from .common import (
+    SP_CAMPAIGN_MEDIA_TYPE,
     extract_items,
     get_sp_client,
     normalize_id_list,
@@ -16,6 +17,7 @@ from .common import (
 MAX_MUTATION_ITEMS = 50
 MIN_BID = 0.02
 MAX_BID = 100.0
+MIN_DAILY_BUDGET = 0.01
 SP_KEYWORD_MEDIA_TYPE = "application/vnd.spKeyword.v3+json"
 SP_NEGATIVE_KEYWORD_MEDIA_TYPE = "application/vnd.spNegativeKeyword.v3+json"
 
@@ -63,6 +65,21 @@ def normalize_bid(value: Any, field_name: str = "bid") -> float:
             f"{field_name} must be between {MIN_BID:.2f} and {MAX_BID:.2f}"
         )
     return bid
+
+
+def normalize_daily_budget(
+    value: Any,
+    field_name: str = "daily_budget",
+) -> float:
+    """Parse and validate a Sponsored Products daily budget."""
+    daily_budget = parse_number(value)
+    if daily_budget is None:
+        raise SPWriteValidationError(f"{field_name} must be a number")
+    if daily_budget < MIN_DAILY_BUDGET:
+        raise SPWriteValidationError(
+            f"{field_name} must be at least {MIN_DAILY_BUDGET:.2f}"
+        )
+    return daily_budget
 
 
 def normalize_match_type(
@@ -372,3 +389,18 @@ async def list_negative_keywords(
     )
     response.raise_for_status()
     return extract_items(response.json(), "negativeKeywords")
+
+
+async def list_campaigns_for_write(
+    client: Any,
+    *,
+    campaign_ids: list[str],
+) -> list[dict[str, Any]]:
+    """List Sponsored Products campaigns for write-tool preflight checks."""
+    payload = {
+        "campaignIdFilter": normalize_id_list(campaign_ids),
+        "count": max(len(campaign_ids), 1),
+    }
+    response = await sp_post(client, "/sp/campaigns/list", payload, SP_CAMPAIGN_MEDIA_TYPE)
+    response.raise_for_status()
+    return extract_items(response.json(), "campaigns")
