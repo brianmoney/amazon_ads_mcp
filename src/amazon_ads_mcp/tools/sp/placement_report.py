@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from datetime import date
+import logging
 import re
 from typing import Any
+
+import httpx
 
 from .common import (
     SP_CAMPAIGN_MEDIA_TYPE,
@@ -18,6 +21,9 @@ from .common import (
     sp_post,
 )
 from .report_helper import resume_sp_report, run_sp_report
+
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_PLACEMENT_REPORT_TIMEOUT_SECONDS = 120.0
@@ -219,7 +225,12 @@ async def get_placement_report(
         campaign_context = await _fetch_campaign_multiplier_context(
             client, report_campaign_ids
         )
-    except Exception:
+    except (httpx.HTTPError, ValueError):
+        logger.debug(
+            "Placement multiplier lookup failed for campaigns %s; returning rows without multiplier context.",
+            report_campaign_ids,
+            exc_info=True,
+        )
         campaign_context = {}
 
     rows = [

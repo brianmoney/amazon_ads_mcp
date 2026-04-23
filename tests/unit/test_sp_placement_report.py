@@ -1,6 +1,8 @@
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from amazon_ads_mcp.tools.sp import placement_report as placement_module
@@ -221,7 +223,13 @@ async def test_get_placement_report_preserves_rows_when_multiplier_lookup_fails(
     monkeypatch.setattr(
         placement_module,
         "_fetch_campaign_multiplier_context",
-        AsyncMock(side_effect=RuntimeError("campaign lookup failed")),
+        AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "campaign lookup failed",
+                request=httpx.Request("POST", "https://advertising-api.amazon.com"),
+                response=httpx.Response(500),
+            )
+        ),
     )
 
     result = await placement_module.get_placement_report(
@@ -237,6 +245,80 @@ async def test_get_placement_report_preserves_rows_when_multiplier_lookup_fails(
     assert row["roas"] is None
     assert row["current_top_of_search_multiplier"] is None
     assert row["current_product_pages_multiplier"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_placement_report_logs_debug_when_multiplier_lookup_fails(
+    monkeypatch, caplog
+):
+    fake_client = FakeClient()
+    manager = SimpleNamespace()
+
+    monkeypatch.setattr(
+        placement_module, "require_sp_context", lambda: (manager, "profile-1", "na")
+    )
+    monkeypatch.setattr(
+        placement_module, "get_sp_client", AsyncMock(return_value=fake_client)
+    )
+    monkeypatch.setattr(
+        placement_module,
+        "run_sp_report",
+        AsyncMock(
+            return_value={
+                "report_id": "rpt-placement-3",
+                "rows": [{"campaignId": 10, "placementClassification": "TOP_OF_SEARCH"}],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        placement_module,
+        "_fetch_campaign_multiplier_context",
+        AsyncMock(side_effect=httpx.HTTPError("campaign lookup failed")),
+    )
+
+    with caplog.at_level(logging.DEBUG, logger=placement_module.logger.name):
+        await placement_module.get_placement_report(
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+        )
+
+    assert "Placement multiplier lookup failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_get_placement_report_does_not_hide_unexpected_multiplier_lookup_errors(
+    monkeypatch,
+):
+    fake_client = FakeClient()
+    manager = SimpleNamespace()
+
+    monkeypatch.setattr(
+        placement_module, "require_sp_context", lambda: (manager, "profile-1", "na")
+    )
+    monkeypatch.setattr(
+        placement_module, "get_sp_client", AsyncMock(return_value=fake_client)
+    )
+    monkeypatch.setattr(
+        placement_module,
+        "run_sp_report",
+        AsyncMock(
+            return_value={
+                "report_id": "rpt-placement-4",
+                "rows": [{"campaignId": 10, "placementClassification": "TOP_OF_SEARCH"}],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        placement_module,
+        "_fetch_campaign_multiplier_context",
+        AsyncMock(side_effect=RuntimeError("unexpected programming error")),
+    )
+
+    with pytest.raises(RuntimeError, match="unexpected programming error"):
+        await placement_module.get_placement_report(
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+        )
 
 
 @pytest.mark.asyncio
