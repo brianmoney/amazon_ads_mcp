@@ -1,42 +1,79 @@
 # Amazon Ads MCP
 
-Amazon Ads MCP is a Python MCP server that provides Amazon Ads authentication, profile and region management, and a purpose-built set of Sponsored Products tools for campaign management, keyword analysis, bid optimization, and search term harvesting.
+Amazon Ads MCP is a Python MCP server that provides Amazon Ads authentication, profile and region management, and a purpose-built set of Sponsored Products and Sponsored Display tools for reporting and campaign operations.
+
+## Source Of Truth
+
+This README is intended to be the human-readable source of truth for the MCP surface exposed to agent clients.
+
+It is derived from the server registration code in:
+
+- `src/amazon_ads_mcp/server/builtin_tools.py`
+- `src/amazon_ads_mcp/tools/sp/__init__.py`
+- `src/amazon_ads_mcp/tools/sd/__init__.py`
+- `src/amazon_ads_mcp/server/builtin_prompts.py`
+
+The server does not expose the legacy OpenAPI-generated tool catalog, download/export tools, or code-mode helpers.
 
 ## Server Surface
 
+### Always-Available Utility Tools
+
+- `set_active_profile` — Set the active Amazon Ads profile ID used for API calls.
+- `get_active_profile` — Return the currently active profile ID.
+- `clear_active_profile` — Clear the active profile selection.
+- `select_profile` — Interactively choose a profile through MCP elicitation when the profile list is small enough to display safely.
+- `summarize_profiles` — Summarize available profiles by country and account type.
+- `search_profiles` — Search profiles by account name, country, or account type.
+- `page_profiles` — Page through profiles with bounded `offset` and `limit` output.
+- `refresh_profiles_cache` — Refresh cached profiles for the current auth context and region.
+- `set_region` — Set the region used for Amazon Ads API routing.
+- `get_region` — Return the current region setting.
+- `list_regions` — List the supported routing regions.
+- `get_routing_state` — Return the effective routing state, including region, resolved host, headers, and sandbox mode.
+
 ### Sponsored Products Tools
 
-- `list_campaigns` — List SP campaigns with nested ad groups
-- `get_campaign_budget_history` — Async daily budget pacing report with spend, utilization, and optional hours-ran context
-- `get_keyword_performance` — Async keyword performance report with derived metrics (ACOS, ROAS, CPC, CTR)
-- `get_placement_report` — Async placement performance report with current top-of-search and product-page multipliers
-- `get_search_term_report` — Async search term report with manual/negative keyword context
-- `sp_report_status` — Check the lifecycle status of an in-progress report by ID
-- `adjust_keyword_bids` — Batch bid updates with before/after audit trail
-- `add_keywords` — Add SP keywords with duplicate detection
-- `negate_keywords` — Add negative exact keywords to a campaign or ad group
-- `pause_keywords` — Pause SP keywords with no-op detection
-- `update_campaign_budget` — Update one SP campaign daily budget with no-op detection and audit context
+- `list_campaigns` — List Sponsored Products campaigns with nested ad-group context.
+- `get_campaign_budget_history` — Run or resume an async Sponsored Products budget history report and return daily budget pacing and utilization context.
+- `get_impression_share_report` — Run or resume an async Sponsored Products top-of-search impression share report with explicit availability diagnostics.
+- `get_keyword_performance` — Run or resume an async Sponsored Products keyword report with derived metrics such as ACOS, ROAS, CPC, and CTR.
+- `get_placement_report` — Run or resume an async Sponsored Products placement report with current placement multipliers.
+- `get_search_term_report` — Run or resume an async Sponsored Products search-term report with manual-keyword and negative-keyword context.
+- `sp_report_status` — Check the lifecycle state of a previously created Sponsored Products async report by report ID.
+- `adjust_keyword_bids` — Apply batch Sponsored Products keyword bid changes and return audit details.
+- `add_keywords` — Create Sponsored Products keywords while detecting duplicates.
+- `negate_keywords` — Create negative exact Sponsored Products keywords at the campaign or ad-group level.
+- `pause_keywords` — Pause Sponsored Products keywords with no-op detection.
+- `update_campaign_budget` — Update a Sponsored Products campaign daily budget and return audit details.
 
-### Profile and Region Management
+### Sponsored Display Tools
 
-- `set_active_profile` / `get_active_profile` / `clear_active_profile`
-- `select_profile` — Interactive profile selection via MCP elicitation
-- `summarize_profiles` / `search_profiles` / `page_profiles` / `refresh_profiles_cache`
-- `set_region` / `get_region` / `list_regions` / `get_routing_state`
+- `list_sd_campaigns` — List Sponsored Display campaigns with targeting-group context.
+- `get_sd_performance` — Run or resume an async Sponsored Display targeting-group performance report with derived metrics.
 
 ### Conditional Tools
 
-- OAuth tools (`start_oauth_flow`, `check_oauth_status`, `refresh_oauth_token`, `clear_oauth_tokens`) — direct auth only
-- Identity tools (`set_active_identity`, `get_active_identity`, `list_identities`) — OpenBridge only
-- `test_sampling` — when `SAMPLING_ENABLED=true`
+These tools are registered only when the corresponding auth or runtime mode is enabled.
+
+- `start_oauth_flow` — Start the Amazon Ads OAuth authorization flow. Available only with direct auth.
+- `check_oauth_status` — Inspect current OAuth authentication state. Available only with direct auth.
+- `refresh_oauth_token` — Manually refresh the OAuth access token. Available only with direct auth.
+- `clear_oauth_tokens` — Clear stored OAuth tokens and OAuth state. Available only with direct auth.
+- `set_active_identity` — Set the active OpenBridge identity used for downstream Amazon Ads calls. Available only with OpenBridge auth.
+- `get_active_identity` — Return the current OpenBridge identity selection. Available only with OpenBridge auth.
+- `list_identities` — List OpenBridge identities available to the current token. Available only with OpenBridge auth.
+- `test_sampling` — Exercise MCP sampling support and optional server-side fallback. Available only when sampling is enabled.
 
 ### Workflow Prompts
 
-- `sp_bid_optimization` — Guided bid optimization workflow
-- `sp_search_term_harvesting` — Guided search term harvest and negation workflow
-- `auth_profile_setup` — Complete authentication and profile setup (direct auth)
-- `troubleshoot_auth_or_routing` / `setup_region`
+These are MCP prompts, not tools.
+
+- `auth_profile_setup` — Guide direct-auth users through OAuth, region setup, profile discovery, and profile activation.
+- `troubleshoot_auth_or_routing` — Diagnose auth, profile, identity, and routing issues based on the current auth mode.
+- `setup_region` — Guide region selection and routing verification.
+- `sp_bid_optimization` — Guide a bounded Sponsored Products bid-optimization workflow using the supported read and write tools.
+- `sp_search_term_harvesting` — Guide a Sponsored Products search-term harvesting and negation workflow using the supported read and write tools.
 
 ## Quick Start
 
