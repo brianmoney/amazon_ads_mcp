@@ -9,6 +9,8 @@ from .common import (
     SP_CAMPAIGN_MEDIA_TYPE,
     clamp_limit,
     clamp_offset,
+    extract_campaign_budget,
+    extract_campaign_budget_type,
     extract_items,
     get_sp_client,
     normalize_id_list,
@@ -26,8 +28,8 @@ def _normalize_campaign(
         "name": campaign.get("name"),
         "state": campaign.get("state"),
         "serving_status": campaign.get("servingStatus"),
-        "budget": parse_number(campaign.get("budget")),
-        "budget_type": campaign.get("budgetType"),
+        "budget": extract_campaign_budget(campaign),
+        "budget_type": extract_campaign_budget_type(campaign),
         "start_date": campaign.get("startDate"),
         "end_date": campaign.get("endDate"),
         "ad_groups": [
@@ -67,7 +69,7 @@ async def list_campaigns(
     if normalized_states:
         campaign_request["stateFilter"] = normalized_states
     if normalized_campaign_ids:
-        campaign_request["campaignIdFilter"] = normalized_campaign_ids
+        campaign_request["campaignIdFilter"] = {"include": normalized_campaign_ids}
 
     campaign_response = await sp_post(
         client,
