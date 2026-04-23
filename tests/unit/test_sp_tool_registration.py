@@ -16,6 +16,7 @@ async def test_register_all_sp_tools_exposes_read_tool_names():
     tool_names = {tool.name for tool in await server.list_tools()}
     assert {
         "list_campaigns",
+        "get_campaign_budget_history",
         "get_keyword_performance",
         "get_placement_report",
         "get_search_term_report",
@@ -26,6 +27,21 @@ async def test_register_all_sp_tools_exposes_read_tool_names():
         "pause_keywords",
         "update_campaign_budget",
     }.issubset(tool_names)
+
+
+@pytest.mark.asyncio
+async def test_register_all_sp_tools_publishes_budget_history_resume_input():
+    server = FastMCP("test")
+
+    await register_all_sp_tools(server)
+
+    budget_tool = await server.get_tool("get_campaign_budget_history")
+
+    assert "resume_from_report_id" in budget_tool.parameters["properties"]
+    assert budget_tool.parameters["properties"]["resume_from_report_id"] == {
+        "anyOf": [{"type": "string"}, {"type": "null"}],
+        "default": None,
+    }
 
 
 @pytest.mark.asyncio
@@ -90,6 +106,7 @@ async def test_server_builder_includes_sp_read_tools(builder):
 
     tool_names = {tool.name for tool in await server.list_tools()}
     assert "list_campaigns" in tool_names
+    assert "get_campaign_budget_history" in tool_names
     assert "get_keyword_performance" in tool_names
     assert "get_placement_report" in tool_names
     assert "get_search_term_report" in tool_names
@@ -99,6 +116,15 @@ async def test_server_builder_includes_sp_read_tools(builder):
     assert "negate_keywords" in tool_names
     assert "pause_keywords" in tool_names
     assert "update_campaign_budget" in tool_names
+
+
+@pytest.mark.asyncio
+async def test_server_builder_publishes_budget_history_resume_input(builder):
+    server = await builder.build()
+
+    budget_tool = await server.get_tool("get_campaign_budget_history")
+
+    assert "resume_from_report_id" in budget_tool.parameters["properties"]
 
 
 @pytest.mark.asyncio
