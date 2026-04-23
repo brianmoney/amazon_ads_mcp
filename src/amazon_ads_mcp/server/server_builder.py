@@ -65,6 +65,9 @@ class ServerBuilder:
         # Setup Sponsored Products tools
         await self._setup_sp_tools()
 
+        # Setup Sponsored Display tools
+        await self._setup_sd_tools()
+
         # Strip outputSchema from all registered tools (saves ~3K tokens)
         await self._strip_output_schemas()
 
@@ -260,6 +263,12 @@ class ServerBuilder:
         from ..tools.sp import register_all_sp_tools
 
         await register_all_sp_tools(self.server)
+
+    async def _setup_sd_tools(self):
+        """Setup Sponsored Display tools for the server."""
+        from ..tools.sd import register_all_sd_tools
+
+        await register_all_sd_tools(self.server)
 
     async def _strip_output_schemas(self):
         """Strip outputSchema from all registered tools.
