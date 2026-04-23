@@ -31,6 +31,15 @@ from .builtin_responses import (
     SetProfileResponse,
     SetRegionResponse,
 )
+from .sd_models import (
+    SDCampaign,
+    SDCampaignListRequest,
+    SDCampaignListResponse,
+    SDPerformanceRequest,
+    SDPerformanceResponse,
+    SDPerformanceRow,
+    SDTargetingGroupContext,
+)
 
 __all__ = [
     "Token",
@@ -60,4 +69,11 @@ __all__ = [
     "OAuthClearResponse",
     "RoutingStateResponse",
     "SamplingTestResponse",
+    "SDCampaignListRequest",
+    "SDTargetingGroupContext",
+    "SDCampaign",
+    "SDCampaignListResponse",
+    "SDPerformanceRequest",
+    "SDPerformanceRow",
+    "SDPerformanceResponse",
 ]
