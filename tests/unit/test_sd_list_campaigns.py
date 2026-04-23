@@ -29,7 +29,7 @@ class FakeClient:
 
     async def post(self, path, json=None, headers=None):
         self.calls.append((path, json, headers))
-        if path == "/sd/campaigns/list":
+        if path == "/adsApi/v1/query/campaigns":
             return FakeResponse(
                 {
                     "campaigns": [
@@ -37,29 +37,49 @@ class FakeClient:
                             "campaignId": 10,
                             "name": "Retargeting",
                             "state": "ENABLED",
-                            "budget": {"budget": 40, "budgetType": "DAILY"},
+                            "budgets": [
+                                {
+                                    "budgetType": "MONETARY",
+                                    "budgetValue": {
+                                        "monetaryBudgetValue": {
+                                            "monetaryBudget": {"value": 40}
+                                        }
+                                    },
+                                    "recurrenceTimePeriod": "DAILY",
+                                }
+                            ],
                             "campaignObjective": "CONVERSIONS",
-                            "biddingModel": "CPC",
+                            "costType": "CPC",
                         },
                         {
                             "campaignId": 11,
                             "name": "Reach",
                             "state": "PAUSED",
-                            "budget": {"budget": 15, "budgetType": "DAILY"},
+                            "budgets": [
+                                {
+                                    "budgetType": "MONETARY",
+                                    "budgetValue": {
+                                        "monetaryBudgetValue": {
+                                            "monetaryBudget": {"value": 15}
+                                        }
+                                    },
+                                    "recurrenceTimePeriod": "DAILY",
+                                }
+                            ],
                             "campaignObjective": "REACH",
-                            "biddingModel": "VCPM",
+                            "costType": "VCPM",
                         },
                     ]
                 }
             )
-        if path == "/sd/targetingGroups/list":
+        if path == "/adsApi/v1/query/adGroups":
             return FakeResponse(
                 {
-                    "targetingGroups": [
+                    "adGroups": [
                         {
                             "campaignId": 10,
-                            "targetingGroupId": 100,
-                            "targetingGroupName": "Viewed PDP",
+                            "adGroupId": 100,
+                            "name": "Viewed PDP",
                             "state": "ENABLED",
                         },
                         {
@@ -90,9 +110,8 @@ async def test_list_sd_campaigns_returns_campaigns_with_targeting_groups(monkeyp
     result = await list_campaigns_module.list_sd_campaigns(
         campaign_states=["enabled"],
         campaign_ids=["10", "11"],
-        objectives=["conversions"],
         limit=2,
-        offset=5,
+        offset=0,
     )
 
     assert result["profile_id"] == "profile-1"
@@ -116,20 +135,46 @@ async def test_list_sd_campaigns_returns_campaigns_with_targeting_groups(monkeyp
         }
     ]
     assert fake_client.calls[0][1] == {
-        "count": 2,
-        "startIndex": 5,
-        "stateFilter": ["ENABLED"],
+        "adProductFilter": {"include": ["SPONSORED_DISPLAY"]},
+        "maxResults": 2,
+        "stateFilter": {"include": ["ENABLED"]},
         "campaignIdFilter": {"include": ["10", "11"]},
-        "objectiveFilter": {"include": ["CONVERSIONS"]},
     }
     assert fake_client.calls[0][2] == {
-        "Content-Type": "application/vnd.sdcampaign.v3+json",
-        "Accept": "application/vnd.sdcampaign.v3+json",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    assert fake_client.calls[1][1] == {
+        "adProductFilter": {"include": ["SPONSORED_DISPLAY"]},
+        "campaignIdFilter": {"include": ["10", "11"]},
+        "maxResults": 40,
     }
     assert fake_client.calls[1][2] == {
-        "Content-Type": "application/vnd.sdtargetinggroup.v3+json",
-        "Accept": "application/vnd.sdtargetinggroup.v3+json",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
     }
+
+
+@pytest.mark.asyncio
+async def test_list_sd_campaigns_filters_objectives_after_live_query_contract(monkeypatch):
+    fake_client = FakeClient()
+    manager = SimpleNamespace()
+
+    monkeypatch.setattr(
+        list_campaigns_module,
+        "require_sd_context",
+        lambda: (manager, "profile-1", "na"),
+    )
+    monkeypatch.setattr(
+        list_campaigns_module, "get_sd_client", AsyncMock(return_value=fake_client)
+    )
+
+    result = await list_campaigns_module.list_sd_campaigns(
+        objectives=["conversions"],
+        limit=25,
+    )
+
+    assert [campaign["campaign_id"] for campaign in result["campaigns"]] == ["10"]
 
 
 @pytest.mark.asyncio

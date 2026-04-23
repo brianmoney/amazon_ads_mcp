@@ -71,8 +71,10 @@ async def test_get_sd_performance_returns_normalized_rows(monkeypatch):
     assert vcpm_row["targeting_group_name"] is None
     assert result["returned_count"] == 2
     assert run_report.await_args.kwargs["filters"] == [
-        {"field": "objective", "values": ["CONVERSIONS", "REACH"]}
+        {"field": "campaignObjective", "values": ["CONVERSIONS", "REACH"]}
     ]
+    assert run_report.await_args.kwargs["report_type_id"] == "sdAdvertisedProduct"
+    assert run_report.await_args.kwargs["group_by"] == ["advertiser"]
 
 
 @pytest.mark.asyncio
@@ -174,6 +176,12 @@ async def test_get_sd_performance_surfaces_report_failures(monkeypatch):
             start_date="2026-01-01",
             end_date="2026-01-31",
         )
+
+
+def test_build_report_filters_uses_campaign_objective_field():
+    assert performance_module._build_report_filters(["REACH"]) == [
+        {"field": "campaignObjective", "values": ["REACH"]}
+    ]
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ from .common import (
 from .report_helper import resume_sd_report, run_sd_report
 
 DEFAULT_SD_PERFORMANCE_TIMEOUT_SECONDS = 120.0
+SD_REPORT_TYPE_ID = "sdAdvertisedProduct"
 SD_PERFORMANCE_REPORT_COLUMNS = [
     "campaignId",
     "campaignName",
@@ -56,6 +57,12 @@ def _validate_report_window(start_date: str, end_date: str) -> None:
         raise ValueError(
             "Sponsored Display report start_date must be on or before end_date."
         )
+
+
+def _build_report_filters(objectives: list[str]) -> list[dict[str, Any]]:
+    if not objectives:
+        return []
+    return [{"field": "campaignObjective", "values": objectives}]
 
 
 def _first_present_value(row: dict[str, Any], keys: tuple[str, ...]) -> Any:
@@ -170,18 +177,16 @@ async def get_sd_performance(
         timeout_seconds=timeout_seconds,
     )
 
-    report_filters = []
-    if request.objectives:
-        report_filters.append({"field": "objective", "values": request.objectives})
+    report_filters = _build_report_filters(request.objectives)
 
     if request.resume_from_report_id:
         report = await resume_sd_report(request.resume_from_report_id, client=client)
     else:
         report = await run_sd_report(
-            report_type_id="sdTargeting",
+            report_type_id=SD_REPORT_TYPE_ID,
             start_date=request.start_date,
             end_date=request.end_date,
-            group_by=["targetingGroup"],
+            group_by=["advertiser"],
             columns=SD_PERFORMANCE_REPORT_COLUMNS,
             filters=report_filters,
             timeout_seconds=request.timeout_seconds,

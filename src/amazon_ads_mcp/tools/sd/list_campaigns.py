@@ -13,8 +13,7 @@ from ...models.sd_models import (
     SDTargetingGroupContext,
 )
 from .common import (
-    SD_CAMPAIGN_MEDIA_TYPE,
-    SD_TARGETING_GROUP_MEDIA_TYPE,
+    SD_QUERY_CONTENT_TYPE,
     clamp_limit,
     clamp_offset,
     extract_campaign_budget,
@@ -28,8 +27,8 @@ from .common import (
 
 _OBJECTIVE_KEYS = ("objective", "campaignObjective")
 _BIDDING_MODEL_KEYS = ("biddingModel", "costType")
-_TARGETING_GROUP_ID_KEYS = ("targetingGroupId", "adGroupId")
-_TARGETING_GROUP_NAME_KEYS = ("targetingGroupName", "name")
+_TARGETING_GROUP_ID_KEYS = ("targetId", "adGroupId")
+_TARGETING_GROUP_NAME_KEYS = ("name",)
 
 
 def _first_present_value(row: dict[str, Any], keys: tuple[str, ...]) -> Any:
@@ -78,18 +77,19 @@ async def _fetch_targeting_groups(client, campaign_ids: list[str]) -> list[dict[
     try:
         response = await sd_post(
             client,
-            "/sd/targetingGroups/list",
+            "/adsApi/v1/query/adGroups",
             {
+                "adProductFilter": {"include": ["SPONSORED_DISPLAY"]},
                 "campaignIdFilter": {"include": campaign_ids},
-                "count": clamp_limit(len(campaign_ids) * 20, default=100),
+                "maxResults": clamp_limit(len(campaign_ids) * 20, default=100),
             },
-            SD_TARGETING_GROUP_MEDIA_TYPE,
+            SD_QUERY_CONTENT_TYPE,
         )
         response.raise_for_status()
     except httpx.HTTPError:
         return []
 
-    return extract_items(response.json(), "targetingGroups")
+    return extract_items(response.json(), "adGroups")
 
 
 async def list_sd_campaigns(
@@ -118,24 +118,33 @@ async def list_sd_campaigns(
     )
 
     campaign_request: dict[str, Any] = {
-        "count": request.limit,
-        "startIndex": request.offset,
+        "adProductFilter": {"include": ["SPONSORED_DISPLAY"]},
+        "maxResults": request.limit,
     }
     if request.campaign_states:
-        campaign_request["stateFilter"] = request.campaign_states
+        campaign_request["stateFilter"] = {"include": request.campaign_states}
     if request.campaign_ids:
         campaign_request["campaignIdFilter"] = {"include": request.campaign_ids}
-    if request.objectives:
-        campaign_request["objectiveFilter"] = {"include": request.objectives}
 
     campaign_response = await sd_post(
         client,
-        "/sd/campaigns/list",
+        "/adsApi/v1/query/campaigns",
         campaign_request,
-        SD_CAMPAIGN_MEDIA_TYPE,
+        SD_QUERY_CONTENT_TYPE,
     )
     campaign_response.raise_for_status()
     campaign_items = extract_items(campaign_response.json(), "campaigns")
+
+    if request.offset:
+        campaign_items = campaign_items[request.offset : request.offset + request.limit]
+
+    if request.objectives:
+        campaign_items = [
+            item
+            for item in campaign_items
+            if str(_first_present_value(item, _OBJECTIVE_KEYS) or "").strip().upper()
+            in request.objectives
+        ]
 
     returned_campaign_ids = [
         str(item.get("campaignId"))
@@ -156,7 +165,7 @@ async def list_sd_campaigns(
             campaign,
             targeting_groups_by_campaign.get(str(campaign.get("campaignId", "")), []),
         )
-        for campaign in campaign_items
+        for campaign in campaign_items[: request.limit]
     ]
 
     response = SDCampaignListResponse(
