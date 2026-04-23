@@ -8,6 +8,7 @@ from fastmcp import Context, FastMCP
 
 from .add_keywords import add_keywords
 from .adjust_keyword_bids import adjust_keyword_bids
+from .campaign_budget_history import get_campaign_budget_history
 from .keyword_performance import get_keyword_performance
 from .list_campaigns import list_campaigns
 from .negate_keywords import negate_keywords
@@ -37,6 +38,28 @@ async def register_all_sp_tools(server: FastMCP) -> None:
             campaign_ids=campaign_ids,
             limit=limit,
             offset=offset,
+        )
+
+    @server.tool(
+        name="get_campaign_budget_history",
+        description="Get Sponsored Products daily budget history with utilization context",
+    )
+    async def get_campaign_budget_history_tool(
+        ctx: Context,
+        start_date: str,
+        end_date: str,
+        campaign_ids: Optional[list[str]] = None,
+        limit: int = 100,
+        resume_from_report_id: Optional[str] = None,
+        timeout_seconds: float = 120.0,
+    ) -> dict:
+        return await get_campaign_budget_history(
+            start_date=start_date,
+            end_date=end_date,
+            campaign_ids=campaign_ids,
+            limit=limit,
+            resume_from_report_id=resume_from_report_id,
+            timeout_seconds=timeout_seconds,
         )
 
     @server.tool(
