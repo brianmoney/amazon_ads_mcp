@@ -1,11 +1,17 @@
-"""Sponsored Products impression-share reporting."""
+"""Sponsored Products top-of-search impression-share reporting."""
 
 from __future__ import annotations
 
 from datetime import date
 from typing import Any
 
-from .common import clamp_limit, get_sp_client, normalize_id_list, parse_number, require_sp_context
+from .common import (
+    clamp_limit,
+    get_sp_client,
+    normalize_id_list,
+    parse_number,
+    require_sp_context,
+)
 from .report_helper import SPReportError, resume_sp_report, run_sp_report
 
 
@@ -13,43 +19,17 @@ DEFAULT_IMPRESSION_SHARE_TIMEOUT_SECONDS = 120.0
 IMPRESSION_SHARE_REPORT_COLUMNS = [
     "campaignId",
     "campaignName",
-    "adGroupId",
-    "adGroupName",
-    "keywordId",
-    "keyword",
-    "matchType",
-    "impressionShare",
-    "searchTermImpressionShare",
-    "lostImpressionShareBudget",
-    "searchTermImpressionShareLostToBudget",
-    "lostImpressionShareRank",
-    "searchTermImpressionShareLostToRank",
-]
-IMPRESSION_SHARE_FILTERS = [
-    {"field": "keywordType", "values": ["BROAD", "PHRASE", "EXACT"]}
+    "topOfSearchImpressionShare",
 ]
 _CAMPAIGN_NAME_KEYS = ("campaignName", "campaign")
-_AD_GROUP_NAME_KEYS = ("adGroupName", "adGroup")
-_KEYWORD_ID_KEYS = ("keywordId", "targetId")
-_KEYWORD_TEXT_KEYS = ("keywordText", "keyword", "targetingText", "targeting")
-_MATCH_TYPE_KEYS = ("matchType", "keywordType", "targetingMatchType")
-_IMPRESSION_SHARE_KEYS = (
-    "impressionShare",
-    "searchTermImpressionShare",
-    "impression_share",
-    "impressionSharePercent",
+_TOP_OF_SEARCH_IMPRESSION_SHARE_KEYS = (
+    "topOfSearchImpressionShare",
+    "topofsearchimpressionshare",
+    "top_of_search_impression_share",
 )
-_LOST_IS_BUDGET_KEYS = (
-    "lostImpressionShareBudget",
-    "searchTermImpressionShareLostToBudget",
-    "lostISBudget",
-    "lost_is_budget",
-)
-_LOST_IS_RANK_KEYS = (
-    "lostImpressionShareRank",
-    "searchTermImpressionShareLostToRank",
-    "lostISRank",
-    "lost_is_rank",
+_UNSUPPORTED_SCOPE_REASON = (
+    "Current Sponsored Products impression-share support is campaign-level only; "
+    "ad_group_ids and keyword_ids are not supported."
 )
 
 
@@ -88,39 +68,20 @@ def _normalize_share_metric(value: Any) -> float | None:
 def _matches_requested_scope(
     row: dict[str, Any],
     campaign_ids: list[str],
-    ad_group_ids: list[str],
-    keyword_ids: list[str],
 ) -> bool:
     if campaign_ids and str(row.get("campaignId", "")) not in campaign_ids:
-        return False
-    if ad_group_ids and str(row.get("adGroupId", "")) not in ad_group_ids:
-        return False
-    keyword_id = _first_present_value(row, _KEYWORD_ID_KEYS)
-    if keyword_ids and str(keyword_id or "") not in keyword_ids:
         return False
     return True
 
 
 def _normalize_impression_share_row(row: dict[str, Any]) -> dict[str, Any]:
     campaign_id = str(row.get("campaignId", ""))
-    keyword_id = _first_present_value(row, _KEYWORD_ID_KEYS)
 
     return {
         "campaign_id": campaign_id,
         "campaign_name": _first_present_value(row, _CAMPAIGN_NAME_KEYS),
-        "ad_group_id": str(row.get("adGroupId", "")) or None,
-        "ad_group_name": _first_present_value(row, _AD_GROUP_NAME_KEYS),
-        "keyword_id": str(keyword_id) if keyword_id not in (None, "") else None,
-        "keyword_text": _first_present_value(row, _KEYWORD_TEXT_KEYS),
-        "match_type": _first_present_value(row, _MATCH_TYPE_KEYS),
-        "impression_share": _normalize_share_metric(
-            _first_present_value(row, _IMPRESSION_SHARE_KEYS)
-        ),
-        "lost_is_budget": _normalize_share_metric(
-            _first_present_value(row, _LOST_IS_BUDGET_KEYS)
-        ),
-        "lost_is_rank": _normalize_share_metric(
-            _first_present_value(row, _LOST_IS_RANK_KEYS)
+        "top_of_search_impression_share": _normalize_share_metric(
+            _first_present_value(row, _TOP_OF_SEARCH_IMPRESSION_SHARE_KEYS)
         ),
     }
 
@@ -128,29 +89,19 @@ def _normalize_impression_share_row(row: dict[str, Any]) -> dict[str, Any]:
 def _build_coverage(
     rows: list[dict[str, Any]],
     campaign_ids: list[str],
-    ad_group_ids: list[str],
-    keyword_ids: list[str],
 ) -> dict[str, Any]:
     returned_campaign_ids = sorted(
         {row["campaign_id"] for row in rows if row.get("campaign_id")}
     )
-    returned_ad_group_ids = sorted(
-        {row["ad_group_id"] for row in rows if row.get("ad_group_id")}
-    )
-    returned_keyword_ids = sorted(
-        {row["keyword_id"] for row in rows if row.get("keyword_id")}
-    )
 
     missing_campaign_ids = sorted(set(campaign_ids) - set(returned_campaign_ids))
-    missing_ad_group_ids = sorted(set(ad_group_ids) - set(returned_ad_group_ids))
-    missing_keyword_ids = sorted(set(keyword_ids) - set(returned_keyword_ids))
 
-    if not rows and (campaign_ids or ad_group_ids or keyword_ids):
+    if not rows and campaign_ids:
         state = "unavailable"
         reason = (
             "Impression-share data could not be retrieved for the requested scope."
         )
-    elif missing_campaign_ids or missing_ad_group_ids or missing_keyword_ids:
+    elif missing_campaign_ids:
         state = "partial"
         reason = (
             "Impression-share data was only available for part of the requested scope."
@@ -163,8 +114,8 @@ def _build_coverage(
         "state": state,
         "reason": reason,
         "missing_campaign_ids": missing_campaign_ids,
-        "missing_ad_group_ids": missing_ad_group_ids,
-        "missing_keyword_ids": missing_keyword_ids,
+        "missing_ad_group_ids": [],
+        "missing_keyword_ids": [],
     }
 
 
@@ -262,7 +213,7 @@ async def get_impression_share_report(
     resume_from_report_id: str | None = None,
     timeout_seconds: float = DEFAULT_IMPRESSION_SHARE_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
-    """Return normalized Sponsored Products impression-share rows."""
+    """Return normalized Sponsored Products top-of-search impression-share rows."""
     _validate_report_window(start_date, end_date)
 
     auth_manager, profile_id, region = require_sp_context()
@@ -271,18 +222,36 @@ async def get_impression_share_report(
     normalized_campaign_ids = normalize_id_list(campaign_ids)
     normalized_ad_group_ids = normalize_id_list(ad_group_ids)
     normalized_keyword_ids = normalize_id_list(keyword_ids)
+    bounded_limit = clamp_limit(limit, default=100)
+
+    if normalized_ad_group_ids or normalized_keyword_ids:
+        return _build_unavailable_response(
+            profile_id=profile_id,
+            region=region,
+            start_date=start_date,
+            end_date=end_date,
+            campaign_ids=normalized_campaign_ids,
+            ad_group_ids=normalized_ad_group_ids,
+            keyword_ids=normalized_keyword_ids,
+            limit=bounded_limit,
+            resume_from_report_id=resume_from_report_id,
+            timeout_seconds=timeout_seconds,
+            availability={
+                "state": "unsupported",
+                "reason": _UNSUPPORTED_SCOPE_REASON,
+            },
+        )
 
     try:
         if resume_from_report_id:
             report = await resume_sp_report(resume_from_report_id, client=client)
         else:
             report = await run_sp_report(
-                report_type_id="spTargeting",
+                report_type_id="spCampaigns",
                 start_date=start_date,
                 end_date=end_date,
-                group_by=["targeting"],
+                group_by=["campaign"],
                 columns=IMPRESSION_SHARE_REPORT_COLUMNS,
-                filters=IMPRESSION_SHARE_FILTERS,
                 timeout_seconds=timeout_seconds,
                 client=client,
             )
@@ -298,21 +267,18 @@ async def get_impression_share_report(
             campaign_ids=normalized_campaign_ids,
             ad_group_ids=normalized_ad_group_ids,
             keyword_ids=normalized_keyword_ids,
-            limit=clamp_limit(limit, default=100),
+            limit=bounded_limit,
             resume_from_report_id=resume_from_report_id,
             timeout_seconds=timeout_seconds,
             availability=availability,
         )
 
-    bounded_limit = clamp_limit(limit, default=100)
     filtered_rows = [
         row
         for row in report["rows"]
         if _matches_requested_scope(
             row,
             normalized_campaign_ids,
-            normalized_ad_group_ids,
-            normalized_keyword_ids,
         )
     ]
     rows = [
@@ -322,8 +288,6 @@ async def get_impression_share_report(
     coverage = _build_coverage(
         rows,
         normalized_campaign_ids,
-        normalized_ad_group_ids,
-        normalized_keyword_ids,
     )
 
     return {
