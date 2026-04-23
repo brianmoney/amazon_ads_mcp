@@ -30,6 +30,26 @@ POLL_BACKOFF_FACTOR = 1.5
 class SPReportError(RuntimeError):
     """Raised when the Sponsored Products report lifecycle fails."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        response_text: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.response_text = response_text
+
+
+def _build_http_error(message: str, exc: httpx.HTTPError) -> SPReportError:
+    response = exc.response
+    return SPReportError(
+        message,
+        status_code=response.status_code if response is not None else None,
+        response_text=(response.text if response is not None else None),
+    )
+
 
 def _parse_report_rows(content: bytes) -> list[dict[str, Any]]:
     try:
@@ -200,11 +220,13 @@ async def create_sp_report(
             if match:
                 report_id = match.group(1)
             else:
-                raise SPReportError(
-                    "Sponsored Products report creation failed."
+                raise _build_http_error(
+                    "Sponsored Products report creation failed.", exc
                 ) from exc
         else:
-            raise SPReportError("Sponsored Products report creation failed.") from exc
+            raise _build_http_error(
+                "Sponsored Products report creation failed.", exc
+            ) from exc
 
     if isinstance(create_payload, dict):
         report_id = create_payload.get("reportId")
@@ -223,8 +245,8 @@ async def fetch_sp_report_status(report_id: str, *, client=None) -> dict[str, An
         status_response.raise_for_status()
         status_payload = status_response.json()
     except httpx.HTTPError as exc:
-        raise SPReportError(
-            f"Sponsored Products report {report_id} status lookup failed."
+        raise _build_http_error(
+            f"Sponsored Products report {report_id} status lookup failed.", exc
         ) from exc
 
     if not isinstance(status_payload, dict):
@@ -318,8 +340,8 @@ async def download_sp_report_rows(
         download_response = await client.get(download_url)
         download_response.raise_for_status()
     except httpx.HTTPError as exc:
-        raise SPReportError(
-            f"Sponsored Products report {report_id} download failed."
+        raise _build_http_error(
+            f"Sponsored Products report {report_id} download failed.", exc
         ) from exc
 
     return _parse_report_rows(download_response.content)
