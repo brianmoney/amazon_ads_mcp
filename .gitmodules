@@ -1,3 +1,4 @@
 [submodule "internal"]
 	path = internal
 	url = https://github.com/brianmoney/amazon-ads-mcp-private.git
+	ignore = dirty
