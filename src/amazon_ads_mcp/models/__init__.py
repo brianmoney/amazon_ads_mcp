@@ -38,6 +38,8 @@ from .sd_models import (
     SDPerformanceRequest,
     SDPerformanceResponse,
     SDPerformanceRow,
+    SDReportStatusRequest,
+    SDReportStatusResponse,
     SDTargetingGroupContext,
 )
 
@@ -76,4 +78,6 @@ __all__ = [
     "SDPerformanceRequest",
     "SDPerformanceRow",
     "SDPerformanceResponse",
+    "SDReportStatusRequest",
+    "SDReportStatusResponse",
 ]
