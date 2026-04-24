@@ -93,6 +93,42 @@ class FakeClient:
         raise AssertionError(f"Unexpected path {path}")
 
 
+class OffsetObjectiveClient(FakeClient):
+    async def post(self, path, json=None, headers=None):
+        self.calls.append((path, json, headers))
+        if path == "/adsApi/v1/query/campaigns":
+            return FakeResponse(
+                {
+                    "campaigns": [
+                        {
+                            "campaignId": 1,
+                            "name": "Reach 1",
+                            "state": "ENABLED",
+                            "campaignObjective": "REACH",
+                            "costType": "VCPM",
+                        },
+                        {
+                            "campaignId": 2,
+                            "name": "Conversions 1",
+                            "state": "ENABLED",
+                            "campaignObjective": "CONVERSIONS",
+                            "costType": "CPC",
+                        },
+                        {
+                            "campaignId": 3,
+                            "name": "Conversions 2",
+                            "state": "ENABLED",
+                            "campaignObjective": "CONVERSIONS",
+                            "costType": "CPC",
+                        },
+                    ]
+                }
+            )
+        if path == "/adsApi/v1/query/adGroups":
+            return FakeResponse({"adGroups": []})
+        raise AssertionError(f"Unexpected path {path}")
+
+
 @pytest.mark.asyncio
 async def test_list_sd_campaigns_returns_campaigns_with_targeting_groups(monkeypatch):
     fake_client = FakeClient()
@@ -175,6 +211,30 @@ async def test_list_sd_campaigns_filters_objectives_after_live_query_contract(mo
     )
 
     assert [campaign["campaign_id"] for campaign in result["campaigns"]] == ["10"]
+
+
+@pytest.mark.asyncio
+async def test_list_sd_campaigns_applies_offset_after_objective_filtering(monkeypatch):
+    fake_client = OffsetObjectiveClient()
+    manager = SimpleNamespace()
+
+    monkeypatch.setattr(
+        list_campaigns_module,
+        "require_sd_context",
+        lambda: (manager, "profile-1", "na"),
+    )
+    monkeypatch.setattr(
+        list_campaigns_module, "get_sd_client", AsyncMock(return_value=fake_client)
+    )
+
+    result = await list_campaigns_module.list_sd_campaigns(
+        objectives=["conversions"],
+        limit=1,
+        offset=1,
+    )
+
+    assert [campaign["campaign_id"] for campaign in result["campaigns"]] == ["3"]
+    assert fake_client.calls[0][1]["maxResults"] == 2
 
 
 @pytest.mark.asyncio
