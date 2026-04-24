@@ -8,6 +8,7 @@ from fastmcp import Context, FastMCP
 
 from .list_campaigns import list_sd_campaigns
 from .performance import get_sd_performance
+from .report_status import get_sd_report_status
 
 
 async def register_all_sd_tools(server: FastMCP) -> None:
@@ -58,3 +59,10 @@ async def register_all_sd_tools(server: FastMCP) -> None:
             resume_from_report_id=resume_from_report_id,
             timeout_seconds=timeout_seconds,
         )
+
+    @server.tool(
+        name="sd_report_status",
+        description="Check Sponsored Display report lifecycle status for a known report ID",
+    )
+    async def sd_report_status_tool(ctx: Context, report_id: str) -> dict:
+        return await get_sd_report_status(report_id=report_id)
