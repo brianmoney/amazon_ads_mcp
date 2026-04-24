@@ -24,10 +24,13 @@ Route Amazon Ads requests to the smallest supported workflow without inventing t
 - Campaign structure recommendations: use `amz-campaign-structure`.
 - Sponsored Display campaign discovery: use `list_sd_campaigns`.
 - Sponsored Display targeting-group performance: use `get_sd_performance`.
+- Sponsored Display async status checks: use `sd_report_status` for known in-flight SD report IDs.
 
 ## Sponsored Display Guardrails
 
-- Supported Sponsored Display reads are limited to `list_sd_campaigns` and `get_sd_performance`.
+- Supported Sponsored Display reads are limited to `list_sd_campaigns`, `get_sd_performance`, and `sd_report_status`.
+- For long-running Sponsored Display reports, request once with `get_sd_performance`, preserve the returned `report_id`, poll with `sd_report_status`, and resume with `get_sd_performance(resume_from_report_id=...)` when the report is `COMPLETED`.
+- Do not create duplicate Sponsored Display reports when an existing `report_id` is still `QUEUED` or `PROCESSING`.
 - If the user asks for a mixed request, complete the supported Sponsored Display portion with the real tool names above.
 - State any unsupported remainder explicitly. Do not treat the full Sponsored Display surface as unavailable when campaign discovery or targeting-group performance is enough to help.
 - Keep these surfaces unsupported unless a real MCP tool exists: Sponsored Display writes, audience mutations, creative automation, category benchmarks, organic rank, listing quality, and all Sponsored Brands workflows.

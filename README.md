@@ -51,6 +51,7 @@ The server does not expose the legacy OpenAPI-generated tool catalog, download/e
 
 - `list_sd_campaigns` — List Sponsored Display campaigns with targeting-group context.
 - `get_sd_performance` — Run or resume an async Sponsored Display targeting-group performance report with derived metrics.
+- `sd_report_status` — Check the lifecycle state of a previously created Sponsored Display async report by report ID so callers can resume with `get_sd_performance` instead of creating a duplicate report.
 
 ### Conditional Tools
 

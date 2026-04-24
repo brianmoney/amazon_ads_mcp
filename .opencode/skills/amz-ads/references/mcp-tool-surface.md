@@ -35,11 +35,13 @@ Use only the real tool names published by this repository.
 
 - `list_sd_campaigns`: campaign discovery with lightweight targeting-group context when available
 - `get_sd_performance`: targeting-group performance reporting with resumable report retrieval through `resume_from_report_id`
+- `sd_report_status`: inspect the lifecycle state of an existing Sponsored Display async report by `report_id`
 
 ## Supported Workflow Boundaries
 
 - Sponsored Products audits and reporting are supported with the tool names above.
-- Sponsored Display support is limited to campaign discovery and targeting-group performance analysis.
+- Sponsored Display support is limited to campaign discovery, async report status checks, and targeting-group performance analysis.
+- For long-lived Sponsored Display reports, use `get_sd_performance` to request the report, preserve the returned `report_id`, poll `sd_report_status` at bounded intervals, and resume with `get_sd_performance(resume_from_report_id=...)` after completion.
 - When an SD request contains supported and unsupported parts, complete the supported part and call out the unsupported remainder explicitly.
 
 ## Unsupported Surfaces
