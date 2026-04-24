@@ -20,7 +20,7 @@ from .common import (
 )
 from .report_helper import resume_sd_report, run_sd_report
 
-DEFAULT_SD_PERFORMANCE_TIMEOUT_SECONDS = 120.0
+DEFAULT_SD_PERFORMANCE_TIMEOUT_SECONDS = 360.0
 SD_REPORT_TYPE_ID = "sdAdGroup"
 SD_REPORT_GROUP_BY = ["adGroup"]
 SD_PERFORMANCE_REPORT_COLUMNS = [
