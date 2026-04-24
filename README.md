@@ -77,17 +77,43 @@ These are MCP prompts, not tools.
 
 ## Quick Start
 
+Install dependencies:
+
 ```bash
 uv sync
+```
+
+### Run The Server Yourself
+
+Choose one startup method, not both.
+
+Docker:
+
+```bash
 docker compose build
 docker compose up -d
+```
+
+Local process:
+
+```bash
 uv run python -m amazon_ads_mcp.server.mcp_server --transport http --port 9080
 ```
 
-Connect a client:
+The GitHub and package name is `amazon-ads-mcp`, but the Python module path is `amazon_ads_mcp`, so `python -m` commands use underscores, not hyphens.
+
+If you prefer the installed console script name instead of `python -m`, this also works:
 
 ```bash
-claude mcp add amazon-ads-mcp -- python -m amazon_ads_mcp.server.mcp_server --transport http --port 9080
+uv run amazon-ads-mcp --transport http --port 9080
+```
+
+### Let Claude Manage The Server Process
+
+Instead of starting the server yourself, you can register the command directly with Claude. In that mode, do not separately run Docker or a local `uv run` server on the same port.
+
+```bash
+claude mcp add amazon-ads-mcp -- uv run amazon-ads-mcp --transport http --port 9080
 claude mcp list
 ```
 
