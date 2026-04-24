@@ -7,6 +7,7 @@ import pytest
 from amazon_ads_mcp.tools.sd.report_helper import (
     SDReportError,
     create_sd_report,
+    download_sd_report_rows,
     resume_sd_report,
     run_sd_report,
     wait_for_sd_report,
@@ -153,3 +154,55 @@ async def test_create_sd_report_reuses_duplicate_report_id():
     )
 
     assert result == "a15115d8-3da4-49a4-95d5-cc0a3af5f85d"
+
+
+@pytest.mark.asyncio
+async def test_download_sd_report_rows_surfaces_download_failure():
+    client = FakeReportClient(
+        post_responses=[],
+        get_responses=[
+            FakeResponse(
+                json_data={
+                    "status": "COMPLETED",
+                    "url": "https://download.example/report.gz",
+                }
+            ),
+            FakeResponse(status_code=503, json_data={"message": "temporary outage"}),
+        ],
+    )
+
+    with pytest.raises(
+        SDReportError,
+        match=r"Sponsored Display report sd-rpt-4 download failed\. \(status 503\): temporary outage",
+    ):
+        await download_sd_report_rows("sd-rpt-4", client=client)
+
+
+@pytest.mark.asyncio
+async def test_run_sd_report_rejects_malformed_payloads():
+    client = FakeReportClient(
+        post_responses=[FakeResponse(json_data={"reportId": "sd-rpt-5"})],
+        get_responses=[
+            FakeResponse(
+                json_data={
+                    "status": "COMPLETED",
+                    "url": "https://download.example/report.gz",
+                }
+            ),
+            FakeResponse(content=b"not-gzip"),
+        ],
+    )
+
+    with pytest.raises(
+        SDReportError,
+        match=r"Sponsored Display report payload could not be decompressed",
+    ):
+        await run_sd_report(
+            report_type_id="sdTargeting",
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            group_by=["targetingGroup"],
+            columns=["targetingGroupId"],
+            timeout_seconds=5,
+            client=client,
+        )
