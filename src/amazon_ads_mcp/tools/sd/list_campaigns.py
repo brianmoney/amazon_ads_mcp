@@ -116,10 +116,11 @@ async def list_sd_campaigns(
         limit=clamp_limit(limit),
         offset=clamp_offset(offset),
     )
+    candidate_limit = clamp_limit(request.limit + request.offset, default=request.limit)
 
     campaign_request: dict[str, Any] = {
         "adProductFilter": {"include": ["SPONSORED_DISPLAY"]},
-        "maxResults": request.limit,
+        "maxResults": candidate_limit,
     }
     if request.campaign_states:
         campaign_request["stateFilter"] = {"include": request.campaign_states}
@@ -135,9 +136,6 @@ async def list_sd_campaigns(
     campaign_response.raise_for_status()
     campaign_items = extract_items(campaign_response.json(), "campaigns")
 
-    if request.offset:
-        campaign_items = campaign_items[request.offset : request.offset + request.limit]
-
     if request.objectives:
         campaign_items = [
             item
@@ -145,6 +143,11 @@ async def list_sd_campaigns(
             if str(_first_present_value(item, _OBJECTIVE_KEYS) or "").strip().upper()
             in request.objectives
         ]
+
+    if request.offset:
+        campaign_items = campaign_items[request.offset : request.offset + request.limit]
+    else:
+        campaign_items = campaign_items[: request.limit]
 
     returned_campaign_ids = [
         str(item.get("campaignId"))
@@ -165,7 +168,7 @@ async def list_sd_campaigns(
             campaign,
             targeting_groups_by_campaign.get(str(campaign.get("campaignId", "")), []),
         )
-        for campaign in campaign_items[: request.limit]
+        for campaign in campaign_items
     ]
 
     response = SDCampaignListResponse(
