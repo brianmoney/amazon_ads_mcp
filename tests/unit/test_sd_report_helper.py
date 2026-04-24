@@ -23,7 +23,12 @@ class FakeResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            response = httpx.Response(self.status_code, request=self.request)
+            response = httpx.Response(
+                self.status_code,
+                request=self.request,
+                json=self._json_data,
+                content=None if self._json_data is not None else self.content,
+            )
             raise httpx.HTTPStatusError(
                 "request failed", request=self.request, response=response
             )
