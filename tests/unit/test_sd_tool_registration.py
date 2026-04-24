@@ -42,7 +42,7 @@ async def test_register_all_sd_tools_publishes_status_input():
 
     tool = await server.get_tool("sd_report_status")
 
-    assert tool.parameters["properties"]["report_id"] == {"title": "Report Id", "type": "string"}
+    assert tool.parameters["properties"]["report_id"] == {"type": "string"}
     assert tool.parameters["required"] == ["report_id"]
 
 
