@@ -46,7 +46,7 @@ async def register_all_sd_tools(server: FastMCP) -> None:
         objectives: Optional[list[str]] = None,
         limit: int = 100,
         resume_from_report_id: Optional[str] = None,
-        timeout_seconds: float = 120.0,
+        timeout_seconds: float = 360.0,
     ) -> dict:
         return await get_sd_performance(
             start_date=start_date,
