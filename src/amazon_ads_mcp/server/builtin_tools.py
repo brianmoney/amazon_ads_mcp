@@ -19,9 +19,10 @@ Examples
 """
 
 import logging
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastmcp import Context, FastMCP
+from pydantic import Field
 
 from ..auth.manager import get_auth_manager
 from ..config.settings import settings
@@ -56,12 +57,23 @@ async def register_identity_tools(server: FastMCP):
 
     @server.tool(
         name="set_active_identity",
-        description="Set the active identity for Amazon Ads API calls",
+        description=(
+            "Set the active OpenBridge identity for downstream Amazon Ads API "
+            "calls. Available only with OpenBridge auth."
+        ),
     )
     async def set_active_identity_tool(
         ctx: Context,
-        identity_id: str,
-        persist: bool = False,
+        identity_id: Annotated[
+            str,
+            Field(description="Required OpenBridge identity ID to make active."),
+        ],
+        persist: Annotated[
+            bool,
+            Field(
+                description="Persist the active identity selection when the auth manager supports persistence."
+            ),
+        ] = False,
     ):
         """Set the active identity for API calls."""
         from ..models import SetActiveIdentityRequest
@@ -74,13 +86,22 @@ async def register_identity_tools(server: FastMCP):
 
     @server.tool(
         name="get_active_identity",
-        description="Get the currently active identity",
+        description=(
+            "Return the currently active OpenBridge identity selection. "
+            "Available only with OpenBridge auth."
+        ),
     )
     async def get_active_identity_tool(ctx: Context):
         """Get the currently active identity."""
         return await identity.get_active_identity()
 
-    @server.tool(name="list_identities", description="List all available identities")
+    @server.tool(
+        name="list_identities",
+        description=(
+            "List OpenBridge identities available to the current token. "
+            "Available only with OpenBridge auth."
+        ),
+    )
     async def list_identities_tool(ctx: Context) -> dict:
         """List all available identities."""
         return await identity.list_identities()
@@ -94,10 +115,16 @@ async def register_profile_tools(server: FastMCP):
 
     @server.tool(
         name="set_active_profile",
-        description="Set the active profile ID for API calls",
+        description=(
+            "Set the active Amazon Ads profile ID used for downstream API calls."
+        ),
     )
     async def set_active_profile_tool(
-        ctx: Context, profile_id: str
+        ctx: Context,
+        profile_id: Annotated[
+            str,
+            Field(description="Required Amazon Ads profile ID to make active."),
+        ],
     ) -> SetProfileResponse:
         """Set the active profile ID."""
         result = await profile.set_active_profile(profile_id)
@@ -105,14 +132,17 @@ async def register_profile_tools(server: FastMCP):
 
     @server.tool(
         name="get_active_profile",
-        description="Get the currently active profile ID",
+        description="Return the currently active Amazon Ads profile ID.",
     )
     async def get_active_profile_tool(ctx: Context) -> GetProfileResponse:
         """Get the currently active profile ID."""
         result = await profile.get_active_profile()
         return GetProfileResponse(**result)
 
-    @server.tool(name="clear_active_profile", description="Clear the active profile ID")
+    @server.tool(
+        name="clear_active_profile",
+        description="Clear the active profile selection for subsequent tool calls.",
+    )
     async def clear_active_profile_tool(ctx: Context) -> ClearProfileResponse:
         """Clear the active profile ID."""
         result = await profile.clear_active_profile()
@@ -120,7 +150,10 @@ async def register_profile_tools(server: FastMCP):
 
     @server.tool(
         name="select_profile",
-        description="Interactively select a profile from available options",
+        description=(
+            "Interactively select a profile from available options when the "
+            "profile list is small enough to display safely."
+        ),
     )
     async def select_profile_tool(ctx: Context) -> ProfileSelectorResponse:
         """Interactively select an Amazon Ads profile.
@@ -266,7 +299,10 @@ async def register_profile_listing_tools(server: FastMCP):
 
     @server.tool(
         name="summarize_profiles",
-        description="Summarize available profiles by country and account type",
+        description=(
+            "Summarize available profiles by country and account type so you can "
+            "choose a narrower profile search."
+        ),
     )
     async def summarize_profiles_tool(ctx: Context) -> ProfileSummaryResponse:
         """Summarize available profiles."""
@@ -275,14 +311,43 @@ async def register_profile_listing_tools(server: FastMCP):
 
     @server.tool(
         name="search_profiles",
-        description="Search profiles by name, country, or account type",
+        description=(
+            "Search profiles by legal account name or profile_id, with optional "
+            "country and account-type filters. If a brand alias differs from the "
+            "underlying Amazon legal name, use country filtering and search by "
+            "the legal name or profile ID."
+        ),
     )
     async def search_profiles_tool(
         ctx: Context,
-        query: Optional[str] = None,
-        country_code: Optional[str] = None,
-        account_type: Optional[str] = None,
-        limit: int = profile_listing.DEFAULT_SEARCH_LIMIT,
+        query: Annotated[
+            Optional[str],
+            Field(
+                default=None,
+                description=(
+                    "Optional free-text match against the Amazon profile or "
+                    "account legal name, or the profile ID itself."
+                ),
+            ),
+        ] = None,
+        country_code: Annotated[
+            Optional[str],
+            Field(
+                default=None,
+                description="Optional ISO country code filter such as US or DE.",
+            ),
+        ] = None,
+        account_type: Annotated[
+            Optional[str],
+            Field(
+                default=None,
+                description="Optional account type filter such as seller or vendor.",
+            ),
+        ] = None,
+        limit: Annotated[
+            int,
+            Field(description="Maximum number of matching profiles to return."),
+        ] = profile_listing.DEFAULT_SEARCH_LIMIT,
     ) -> ProfileSearchResponse:
         """Search profiles with bounded output."""
         result = await profile_listing.search_profiles(
@@ -295,14 +360,26 @@ async def register_profile_listing_tools(server: FastMCP):
 
     @server.tool(
         name="page_profiles",
-        description="Page through profiles with offset and limit",
+        description="Page through profiles with explicit offset and limit bounds.",
     )
     async def page_profiles_tool(
         ctx: Context,
-        country_code: Optional[str] = None,
-        account_type: Optional[str] = None,
-        offset: int = 0,
-        limit: int = profile_listing.DEFAULT_PAGE_LIMIT,
+        country_code: Annotated[
+            Optional[str],
+            Field(default=None, description="Optional ISO country code filter."),
+        ] = None,
+        account_type: Annotated[
+            Optional[str],
+            Field(default=None, description="Optional account type filter."),
+        ] = None,
+        offset: Annotated[
+            int,
+            Field(description="Zero-based row offset for the next page."),
+        ] = 0,
+        limit: Annotated[
+            int,
+            Field(description="Maximum number of profiles to return in this page."),
+        ] = profile_listing.DEFAULT_PAGE_LIMIT,
     ) -> ProfilePageResponse:
         """Return a page of profiles with bounded output."""
         result = await profile_listing.page_profiles(
@@ -315,7 +392,9 @@ async def register_profile_listing_tools(server: FastMCP):
 
     @server.tool(
         name="refresh_profiles_cache",
-        description="Force refresh of cached profiles for the current identity and region",
+        description=(
+            "Force refresh of cached profiles for the current identity and region."
+        ),
     )
     async def refresh_profiles_cache_tool(ctx: Context) -> ProfileCacheRefreshResponse:
         """Force refresh the cached profile list."""
@@ -331,20 +410,35 @@ async def register_region_tools(server: FastMCP):
 
     @server.tool(
         name="set_region",
-        description="Set the region for Amazon Ads API calls",
+        description=(
+            "Set the Amazon Ads routing region. Use one of the supported region "
+            "codes from list_regions before running ads tools."
+        ),
     )
-    async def set_region_tool(ctx: Context, region_code: str) -> SetRegionResponse:
+    async def set_region_tool(
+        ctx: Context,
+        region_code: Annotated[
+            str,
+            Field(description="Required routing region code such as na, eu, or fe."),
+        ],
+    ) -> SetRegionResponse:
         """Set the region for API calls."""
         result = await region.set_region(region_code)
         return SetRegionResponse(**result)
 
-    @server.tool(name="get_region", description="Get the current region setting")
+    @server.tool(
+        name="get_region",
+        description="Return the current Amazon Ads routing region setting.",
+    )
     async def get_region_tool(ctx: Context) -> GetRegionResponse:
         """Get the current region."""
         result = await region.get_region()
         return GetRegionResponse(**result)
 
-    @server.tool(name="list_regions", description="List all available regions")
+    @server.tool(
+        name="list_regions",
+        description="List the supported Amazon Ads routing regions for this server.",
+    )
     async def list_regions_tool(ctx: Context) -> ListRegionsResponse:
         """List available regions."""
         result = await region.list_regions()
@@ -352,7 +446,10 @@ async def register_region_tools(server: FastMCP):
 
     @server.tool(
         name="get_routing_state",
-        description="Get the current routing state including region, host, and headers",
+        description=(
+            "Return the effective routing state including resolved region, host, "
+            "auth headers, and sandbox mode for debugging."
+        ),
     )
     async def get_routing_state_tool(ctx: Context) -> RoutingStateResponse:
         """Get the complete routing state for debugging."""
@@ -397,11 +494,17 @@ async def register_sampling_tools(server: FastMCP):
 
     @server.tool(
         name="test_sampling",
-        description="Test LLM sampling functionality via MCP client",
+        description=(
+            "Exercise MCP sampling support and optional server-side fallback. "
+            "Available only when sampling is enabled."
+        ),
     )
     async def test_sampling_tool(
         ctx: Context,
-        message: str = "Hello, please summarize this test message",
+        message: Annotated[
+            str,
+            Field(description="Prompt text to send through the sampling path."),
+        ] = "Hello, please summarize this test message",
     ) -> SamplingTestResponse:
         """Test the native MCP sampling functionality.
 
@@ -499,7 +602,10 @@ async def register_oauth_tools_builtin(server: FastMCP):
 
     @server.tool(
         name="start_oauth_flow",
-        description="Start the OAuth authorization flow for Amazon Ads API",
+        description=(
+            "Start the Amazon Ads OAuth authorization flow. Available only with "
+            "direct auth."
+        ),
     )
     async def start_oauth_flow(ctx: Context):
         """Start the OAuth authorization flow."""
@@ -507,7 +613,10 @@ async def register_oauth_tools_builtin(server: FastMCP):
 
     @server.tool(
         name="check_oauth_status",
-        description="Check the current OAuth authentication status",
+        description=(
+            "Inspect the current OAuth authentication state. Available only with "
+            "direct auth."
+        ),
     )
     async def check_oauth_status(ctx: Context):
         """Check OAuth authentication status."""
@@ -515,7 +624,9 @@ async def register_oauth_tools_builtin(server: FastMCP):
 
     @server.tool(
         name="refresh_oauth_token",
-        description="Manually refresh the OAuth access token",
+        description=(
+            "Manually refresh the OAuth access token. Available only with direct auth."
+        ),
     )
     async def refresh_oauth_token(ctx: Context):
         """Refresh OAuth access token."""
@@ -523,7 +634,10 @@ async def register_oauth_tools_builtin(server: FastMCP):
 
     @server.tool(
         name="clear_oauth_tokens",
-        description="Clear all stored OAuth tokens and state",
+        description=(
+            "Clear stored OAuth tokens and OAuth state. Available only with "
+            "direct auth."
+        ),
     )
     async def clear_oauth_tokens(ctx: Context):
         """Clear OAuth tokens."""

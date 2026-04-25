@@ -6,6 +6,11 @@ from amazon_ads_mcp import __version__
 from amazon_ads_mcp.server.server_builder import ServerBuilder
 
 
+def _assert_contains(text: str, *parts: str) -> None:
+    for part in parts:
+        assert part in text
+
+
 @pytest.fixture
 def builder(monkeypatch):
     fake_auth_manager = SimpleNamespace(provider=None)
@@ -59,6 +64,83 @@ async def test_build_registers_health_route(builder):
     server = await builder.build()
 
     assert hasattr(server, "custom_route")
+
+
+@pytest.mark.asyncio
+async def test_build_publishes_builtin_metadata_guidance(builder):
+    server = await builder.build()
+
+    search_tool = await server.get_tool("search_profiles")
+    region_tool = await server.get_tool("set_region")
+
+    _assert_contains(
+        search_tool.description,
+        "legal account name or profile_id",
+        "brand alias differs",
+    )
+    _assert_contains(
+        search_tool.parameters["properties"]["query"]["description"],
+        "legal name",
+        "profile ID itself",
+    )
+    _assert_contains(
+        region_tool.parameters["properties"]["region_code"]["description"],
+        "na, eu, or fe",
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_registers_direct_auth_tool_metadata(monkeypatch):
+    fake_auth_manager = SimpleNamespace(
+        provider=SimpleNamespace(provider_type="direct")
+    )
+    monkeypatch.setattr(
+        "amazon_ads_mcp.server.server_builder.get_auth_manager",
+        lambda: fake_auth_manager,
+    )
+    monkeypatch.setattr(
+        "amazon_ads_mcp.server.builtin_tools.get_auth_manager",
+        lambda: fake_auth_manager,
+    )
+    monkeypatch.setattr(
+        "amazon_ads_mcp.server.builtin_prompts.get_auth_manager",
+        lambda: fake_auth_manager,
+    )
+
+    builder = ServerBuilder()
+    server = await builder.build()
+    tool = await server.get_tool("start_oauth_flow")
+
+    _assert_contains(tool.description, "direct auth")
+
+
+@pytest.mark.asyncio
+async def test_build_registers_openbridge_tool_metadata(monkeypatch):
+    fake_auth_manager = SimpleNamespace(
+        provider=SimpleNamespace(provider_type="openbridge")
+    )
+    monkeypatch.setattr(
+        "amazon_ads_mcp.server.server_builder.get_auth_manager",
+        lambda: fake_auth_manager,
+    )
+    monkeypatch.setattr(
+        "amazon_ads_mcp.server.builtin_tools.get_auth_manager",
+        lambda: fake_auth_manager,
+    )
+    monkeypatch.setattr(
+        "amazon_ads_mcp.server.builtin_prompts.get_auth_manager",
+        lambda: fake_auth_manager,
+    )
+
+    builder = ServerBuilder()
+    server = await builder.build()
+    tool = await server.get_tool("set_active_identity")
+
+    _assert_contains(tool.description, "OpenBridge")
+    _assert_contains(
+        tool.parameters["properties"]["identity_id"]["description"],
+        "OpenBridge identity ID",
+    )
 
 
 @pytest.mark.asyncio

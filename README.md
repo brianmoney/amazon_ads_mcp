@@ -25,7 +25,7 @@ The server does not expose the legacy OpenAPI-generated tool catalog, download/e
 - `clear_active_profile` — Clear the active profile selection.
 - `select_profile` — Interactively choose a profile through MCP elicitation when the profile list is small enough to display safely.
 - `summarize_profiles` — Summarize available profiles by country and account type.
-- `search_profiles` — Search profiles by account name, country, or account type.
+- `search_profiles` — Search profiles by Amazon legal account name or profile ID, with optional country and account-type filters. When a brand alias differs from the underlying Amazon name, narrow by country and search with the legal name or profile ID.
 - `page_profiles` — Page through profiles with bounded `offset` and `limit` output.
 - `refresh_profiles_cache` — Refresh cached profiles for the current auth context and region.
 - `set_region` — Set the region used for Amazon Ads API routing.
@@ -35,15 +35,15 @@ The server does not expose the legacy OpenAPI-generated tool catalog, download/e
 
 ### Sponsored Products Tools
 
-- `list_campaigns` — List Sponsored Products campaigns with nested ad-group and nullable portfolio context.
-- `get_campaign_budget_history` — Run or resume an async Sponsored Products budget history report and return daily budget pacing and utilization context.
-- `get_impression_share_report` — Run or resume an async Sponsored Products top-of-search impression share report with explicit availability diagnostics.
-- `get_keyword_performance` — Run or resume an async Sponsored Products keyword report with derived metrics such as ACOS, ROAS, CPC, and CTR.
-- `get_placement_report` — Run or resume an async Sponsored Products placement report with current placement multipliers.
-- `get_search_term_report` — Run or resume an async Sponsored Products search-term report with manual-keyword and negative-keyword context.
+- `list_campaigns` — List Sponsored Products campaigns with nested ad-group and nullable portfolio context. `campaign_states` accepts `ENABLED`, `PAUSED`, or `ARCHIVED`, normalizes values to uppercase, and leaves the listing unfiltered by state when omitted.
+- `get_campaign_budget_history` — Run or resume an async Sponsored Products budget history report and return daily budget pacing and utilization context. `timeout_seconds` bounds server-side polling for the current call; preserve the returned `report_id` and continue with `resume_from_report_id` instead of creating a duplicate report.
+- `get_impression_share_report` — Run or resume an async Sponsored Products top-of-search impression share report with explicit availability diagnostics. `timeout_seconds` bounds server-side polling for the current call; preserve the returned `report_id` and continue with `resume_from_report_id` instead of creating a duplicate report.
+- `get_keyword_performance` — Run or resume an async Sponsored Products keyword report with derived metrics such as ACOS, ROAS, CPC, and CTR. The current tool returns manual keyword rows only, so auto-targeting campaigns can legitimately return zero rows. `timeout_seconds` bounds server-side polling for the current call; preserve the returned `report_id` and continue with `resume_from_report_id` instead of creating a duplicate report.
+- `get_placement_report` — Run or resume an async Sponsored Products placement report with current placement multipliers. `timeout_seconds` bounds server-side polling for the current call; preserve the returned `report_id` and continue with `resume_from_report_id` instead of creating a duplicate report.
+- `get_search_term_report` — Run or resume an async Sponsored Products search-term report with manual-keyword and negative-keyword context. `timeout_seconds` bounds server-side polling for the current call; preserve the returned `report_id` and continue with `resume_from_report_id` instead of creating a duplicate report.
 - `sp_report_status` — Check the lifecycle state of a previously created Sponsored Products async report by report ID.
-- `adjust_keyword_bids` — Apply batch Sponsored Products keyword bid changes and return audit details.
-- `add_keywords` — Create Sponsored Products keywords while detecting duplicates.
+- `adjust_keyword_bids` — Apply batch Sponsored Products keyword bid changes and return audit details. `adjustments` is a required non-empty list of `{ keyword_id, new_bid, reason? }`, the current bid bounds are `0.02` to `100.00`, and `previous_bid` or `prior_bid` reflects the live preflight bid observed at write time.
+- `add_keywords` — Create Sponsored Products keywords while detecting duplicates. Required inputs are `campaign_id`, `ad_group_id`, and keyword items shaped like `{ keyword_text, bid, match_type? }`, with supported match types `EXACT`, `PHRASE`, and `BROAD` and bid bounds `0.02` to `100.00`.
 - `negate_keywords` — Create negative exact Sponsored Products keywords at the campaign or ad-group level.
 - `pause_keywords` — Pause Sponsored Products keywords with no-op detection.
 - `update_campaign_budget` — Update a Sponsored Products campaign daily budget and return audit details.
@@ -52,12 +52,12 @@ The server does not expose the legacy OpenAPI-generated tool catalog, download/e
 
 - `list_portfolios` — List portfolios with normalized budget settings for the active profile and region.
 - `get_portfolio_budget_usage` — Return current spend-versus-cap usage for requested portfolios with explicit availability diagnostics.
-- `update_portfolio_budget` — Update a portfolio daily or monthly budget and return applied, skipped, or failed audit details.
+- `update_portfolio_budget` — Update a portfolio daily or monthly budget and return applied, skipped, or failed audit details. Use `budget_scope=daily` for an always-on cap, or `budget_scope=monthly` with both `start_date` and `end_date` for a date-range budget.
 
 ### Sponsored Display Tools
 
 - `list_sd_campaigns` — List Sponsored Display campaigns with targeting-group context.
-- `get_sd_performance` — Run or resume an async Sponsored Display targeting-group performance report with derived metrics.
+- `get_sd_performance` — Run or resume an async Sponsored Display targeting-group performance report with derived metrics. `timeout_seconds` bounds server-side polling for the current call; preserve the returned `report_id` and continue with `resume_from_report_id` instead of creating a duplicate report.
 - `sd_report_status` — Check the lifecycle state of a previously created Sponsored Display async report by report ID so callers can resume with `get_sd_performance` instead of creating a duplicate report.
 
 ### Conditional Tools
