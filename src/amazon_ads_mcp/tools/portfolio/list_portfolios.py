@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
+
 from .common import (
+    PortfolioValidationError,
     get_portfolio_client,
     normalize_portfolio_record,
+    portfolio_http_error_message,
     query_portfolios,
     require_portfolio_context,
 )
@@ -22,13 +26,20 @@ async def list_portfolios(
     auth_manager, profile_id, region = require_portfolio_context()
     client = await get_portfolio_client(auth_manager)
 
-    page = await query_portfolios(
-        client,
-        portfolio_ids=portfolio_ids,
-        portfolio_states=portfolio_states,
-        limit=limit,
-        offset=offset,
-    )
+    try:
+        page = await query_portfolios(
+            client,
+            portfolio_ids=portfolio_ids,
+            portfolio_states=portfolio_states,
+            limit=limit,
+            offset=offset,
+        )
+    except httpx.HTTPError as exc:
+        raise PortfolioValidationError(
+            "Portfolio lookup request failed: "
+            + portfolio_http_error_message(exc, "Portfolio lookup request failed")
+        ) from exc
+
     portfolios = [
         normalize_portfolio_record(portfolio)
         for portfolio in page["portfolios"]

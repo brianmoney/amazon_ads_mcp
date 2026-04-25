@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
+
 from .common import (
     PORTFOLIO_BUDGET_USAGE_MEDIA_TYPE,
     get_portfolio_client,
     normalize_portfolio_record,
     normalize_required_portfolio_ids,
     parse_number,
+    portfolio_http_error_message,
     portfolio_post,
     query_portfolios,
     require_portfolio_context,
@@ -238,6 +241,35 @@ def _build_overall_availability(
     }
 
 
+def _http_error_status(exc: httpx.HTTPError) -> str:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if status_code is None:
+        return "HTTP_ERROR"
+    return f"HTTP_{status_code}"
+
+
+def _build_http_error_diagnostics(
+    requested_portfolio_ids: list[str],
+    exc: httpx.HTTPError,
+) -> list[dict[str, Any]]:
+    details = portfolio_http_error_message(
+        exc,
+        "Portfolio budget usage request failed",
+    )
+    code = _http_error_status(exc)
+    return [
+        {
+            "portfolio_id": portfolio_id,
+            "state": "unavailable",
+            "code": code,
+            "details": details,
+            "index": None,
+        }
+        for portfolio_id in requested_portfolio_ids
+    ]
+
+
 async def get_portfolio_budget_usage(portfolio_ids: list[str]) -> dict[str, Any]:
     """Return normalized portfolio spend-versus-cap usage rows."""
     normalized_portfolio_ids = normalize_required_portfolio_ids(portfolio_ids)
@@ -245,12 +277,16 @@ async def get_portfolio_budget_usage(portfolio_ids: list[str]) -> dict[str, Any]
     auth_manager, profile_id, region = require_portfolio_context()
     client = await get_portfolio_client(auth_manager)
 
-    settings_page = await query_portfolios(
-        client,
-        portfolio_ids=normalized_portfolio_ids,
-        limit=len(normalized_portfolio_ids),
-        offset=0,
-    )
+    try:
+        settings_page = await query_portfolios(
+            client,
+            portfolio_ids=normalized_portfolio_ids,
+            limit=len(normalized_portfolio_ids),
+            offset=0,
+        )
+    except httpx.HTTPError:
+        settings_page = {"portfolios": []}
+
     settings_by_portfolio_id = {
         record["portfolio_id"]: record
         for record in (
@@ -260,14 +296,31 @@ async def get_portfolio_budget_usage(portfolio_ids: list[str]) -> dict[str, Any]
         if record.get("portfolio_id")
     }
 
-    usage_response = await portfolio_post(
-        client,
-        "/portfolios/budget/usage",
-        {"portfolioIds": normalized_portfolio_ids},
-        PORTFOLIO_BUDGET_USAGE_MEDIA_TYPE,
-    )
-    usage_response.raise_for_status()
-    payload = usage_response.json()
+    try:
+        usage_response = await portfolio_post(
+            client,
+            "/portfolios/budget/usage",
+            {"portfolioIds": normalized_portfolio_ids},
+            PORTFOLIO_BUDGET_USAGE_MEDIA_TYPE,
+        )
+        usage_response.raise_for_status()
+        payload = usage_response.json()
+    except httpx.HTTPError as exc:
+        diagnostics = _build_http_error_diagnostics(normalized_portfolio_ids, exc)
+        availability = _build_overall_availability(
+            normalized_portfolio_ids,
+            [],
+            diagnostics,
+        )
+        return {
+            "profile_id": profile_id,
+            "region": region,
+            "filters": {"portfolio_ids": normalized_portfolio_ids},
+            "availability": availability,
+            "diagnostics": diagnostics,
+            "rows": [],
+            "returned_count": 0,
+        }
 
     success_items = _extract_usage_items(payload, "success")
     error_items = _extract_usage_items(payload, "error")

@@ -251,12 +251,34 @@ async def update_portfolio_budget(
     auth_manager, profile_id, region = require_portfolio_context()
     client = await get_portfolio_client(auth_manager)
 
-    preflight = await query_portfolios(
-        client,
-        portfolio_ids=[normalized_portfolio_id],
-        limit=1,
-        offset=0,
-    )
+    try:
+        preflight = await query_portfolios(
+            client,
+            portfolio_ids=[normalized_portfolio_id],
+            limit=1,
+            offset=0,
+        )
+    except httpx.HTTPError as exc:
+        response = getattr(exc, "response", None)
+        status_code = getattr(response, "status_code", None)
+        status = f"HTTP_{status_code}" if status_code is not None else "HTTP_ERROR"
+        return build_mutation_response(
+            profile_id,
+            region,
+            [
+                build_result(
+                    "failed",
+                    status,
+                    portfolio_id=normalized_portfolio_id,
+                    requested_budget_scope=normalized_budget_scope,
+                    requested_budget_amount=normalized_budget_amount,
+                    requested_budget_start_date=normalized_start_date,
+                    requested_budget_end_date=normalized_end_date,
+                    error=_error_message_from_http_error(exc),
+                )
+            ],
+        )
+
     current_item = preflight["portfolios"][0] if preflight["portfolios"] else None
     if current_item is None:
         return build_mutation_response(

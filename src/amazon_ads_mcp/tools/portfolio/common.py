@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Any
+
+import httpx
 
 from ...auth.manager import get_auth_manager
 from ...config.settings import Settings
@@ -31,6 +34,33 @@ class PortfolioContextError(RuntimeError):
 
 class PortfolioValidationError(ValueError):
     """Raised when a portfolio tool request is invalid."""
+
+
+def portfolio_http_error_message(
+    exc: httpx.HTTPError,
+    fallback: str,
+) -> str:
+    """Return a readable portfolio API error message when available."""
+    response = getattr(exc, "response", None)
+    if response is None:
+        return fallback
+
+    try:
+        payload = response.json()
+    except (json.JSONDecodeError, ValueError):
+        payload = None
+
+    if isinstance(payload, dict):
+        for key in ("message", "detail", "description", "error"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    text = getattr(response, "text", "")
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+
+    return fallback
 
 
 def require_portfolio_context() -> tuple[Any, str, str]:
@@ -384,6 +414,7 @@ __all__ = [
     "normalize_required_portfolio_ids",
     "normalize_portfolio_states",
     "parse_number",
+    "portfolio_http_error_message",
     "portfolio_post",
     "portfolio_put",
     "query_portfolios",
