@@ -10,6 +10,7 @@ It is derived from the server registration code in:
 
 - `src/amazon_ads_mcp/server/builtin_tools.py`
 - `src/amazon_ads_mcp/tools/sp/__init__.py`
+- `src/amazon_ads_mcp/tools/portfolio/__init__.py`
 - `src/amazon_ads_mcp/tools/sd/__init__.py`
 - `src/amazon_ads_mcp/server/builtin_prompts.py`
 
@@ -34,7 +35,7 @@ The server does not expose the legacy OpenAPI-generated tool catalog, download/e
 
 ### Sponsored Products Tools
 
-- `list_campaigns` — List Sponsored Products campaigns with nested ad-group context.
+- `list_campaigns` — List Sponsored Products campaigns with nested ad-group and nullable portfolio context.
 - `get_campaign_budget_history` — Run or resume an async Sponsored Products budget history report and return daily budget pacing and utilization context.
 - `get_impression_share_report` — Run or resume an async Sponsored Products top-of-search impression share report with explicit availability diagnostics.
 - `get_keyword_performance` — Run or resume an async Sponsored Products keyword report with derived metrics such as ACOS, ROAS, CPC, and CTR.
@@ -46,6 +47,12 @@ The server does not expose the legacy OpenAPI-generated tool catalog, download/e
 - `negate_keywords` — Create negative exact Sponsored Products keywords at the campaign or ad-group level.
 - `pause_keywords` — Pause Sponsored Products keywords with no-op detection.
 - `update_campaign_budget` — Update a Sponsored Products campaign daily budget and return audit details.
+
+### Portfolio Tools
+
+- `list_portfolios` — List portfolios with normalized budget settings for the active profile and region.
+- `get_portfolio_budget_usage` — Return current spend-versus-cap usage for requested portfolios with explicit availability diagnostics.
+- `update_portfolio_budget` — Update a portfolio daily or monthly budget and return applied, skipped, or failed audit details.
 
 ### Sponsored Display Tools
 

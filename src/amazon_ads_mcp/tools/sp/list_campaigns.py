@@ -19,12 +19,26 @@ from .common import (
     sp_post,
 )
 
+_CAMPAIGN_PORTFOLIO_ID_KEYS = ("portfolioId", "portfolio_id")
+
+
+def _first_present_value(row: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
 
 def _normalize_campaign(
     campaign: dict[str, Any], ad_groups: list[dict[str, Any]]
 ) -> dict[str, Any]:
+    portfolio_id = _first_present_value(campaign, _CAMPAIGN_PORTFOLIO_ID_KEYS)
     return {
         "campaign_id": str(campaign.get("campaignId", "")),
+        "portfolio_id": (
+            str(portfolio_id) if portfolio_id is not None else None
+        ),
         "name": campaign.get("name"),
         "state": campaign.get("state"),
         "serving_status": campaign.get("servingStatus"),

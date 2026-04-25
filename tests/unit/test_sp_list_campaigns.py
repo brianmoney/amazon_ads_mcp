@@ -35,6 +35,7 @@ class FakeClient:
                     "campaigns": [
                         {
                             "campaignId": 10,
+                            "portfolioId": 77,
                             "name": "Campaign A",
                             "state": "ENABLED",
                             "budget": {"budget": 25, "budgetType": "DAILY"},
@@ -95,8 +96,10 @@ async def test_list_campaigns_returns_campaign_hierarchy(monkeypatch):
     assert result["region"] == "na"
     assert result["returned_count"] == 2
     assert result["campaigns"][0]["campaign_id"] == "10"
+    assert result["campaigns"][0]["portfolio_id"] == "77"
     assert result["campaigns"][0]["budget"] == 25.0
     assert result["campaigns"][0]["budget_type"] == "DAILY"
+    assert result["campaigns"][1]["portfolio_id"] is None
     assert result["campaigns"][1]["budget"] == 15.0
     assert result["campaigns"][1]["budget_type"] == "DAILY"
     assert len(result["campaigns"][0]["ad_groups"]) == 2

@@ -93,6 +93,9 @@ async def test_build_runs_sp_setup_before_stripping_schemas(monkeypatch):
     async def record_sp_tools():
         calls.append("sp_tools")
 
+    async def record_portfolio_tools():
+        calls.append("portfolio_tools")
+
     async def record_sd_tools():
         calls.append("sd_tools")
 
@@ -114,6 +117,7 @@ async def test_build_runs_sp_setup_before_stripping_schemas(monkeypatch):
     monkeypatch.setattr(builder, "_setup_http_client", record_http_client)
     monkeypatch.setattr(builder, "_setup_builtin_tools", record_builtin_tools)
     monkeypatch.setattr(builder, "_setup_sp_tools", record_sp_tools)
+    monkeypatch.setattr(builder, "_setup_portfolio_tools", record_portfolio_tools)
     monkeypatch.setattr(builder, "_setup_sd_tools", record_sd_tools)
     monkeypatch.setattr(builder, "_strip_output_schemas", record_strip_schemas)
     monkeypatch.setattr(builder, "_setup_builtin_prompts", record_prompts)
@@ -129,6 +133,7 @@ async def test_build_runs_sp_setup_before_stripping_schemas(monkeypatch):
         "http_client",
         "builtin_tools",
         "sp_tools",
+        "portfolio_tools",
         "sd_tools",
         "strip_output_schemas",
         "builtin_prompts",
