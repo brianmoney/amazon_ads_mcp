@@ -65,6 +65,9 @@ class ServerBuilder:
         # Setup Sponsored Products tools
         await self._setup_sp_tools()
 
+        # Setup portfolio tools
+        await self._setup_portfolio_tools()
+
         # Setup Sponsored Display tools
         await self._setup_sd_tools()
 
@@ -263,6 +266,12 @@ class ServerBuilder:
         from ..tools.sp import register_all_sp_tools
 
         await register_all_sp_tools(self.server)
+
+    async def _setup_portfolio_tools(self):
+        """Setup portfolio tools for the server."""
+        from ..tools.portfolio import register_all_portfolio_tools
+
+        await register_all_portfolio_tools(self.server)
 
     async def _setup_sd_tools(self):
         """Setup Sponsored Display tools for the server."""

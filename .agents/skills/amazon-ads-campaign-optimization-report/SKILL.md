@@ -44,6 +44,7 @@ This skill packages the workflow used in this repository to:
 
 2. Confirm the requested campaign scope before creating a report.
    - Use `mcp_amazon-ads_list_campaigns` when campaign IDs are unknown or need validation.
+   - If the user is asking for budget diagnosis and `list_campaigns` returns `portfolio_id`, check `mcp_amazon-ads_list_portfolios` and `mcp_amazon-ads_get_portfolio_budget_usage` before assuming the campaign daily budget is the only constraint.
    - Prefer a narrow campaign scope when the user provides one, but remember that some report flows may still return broader data depending on the report already being resumed.
 
 3. Request keyword performance data.
@@ -170,6 +171,7 @@ This skill packages the workflow used in this repository to:
 - Auth is valid or refreshed before report calls.
 - Active profile is confirmed.
 - Campaign IDs in the output are real and traceable via `list_campaigns`.
+- If the output makes a budget recommendation for portfolio-managed campaigns, it states whether portfolio evidence was checked or remains unavailable.
 - Report status is checked before treating a timeout as terminal.
 - Signed download URLs are refreshed if a download returns `403`.
 - Campaign-level totals reconcile with the underlying keyword rows.
