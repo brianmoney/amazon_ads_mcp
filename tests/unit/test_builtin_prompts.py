@@ -110,3 +110,24 @@ async def test_search_term_harvesting_prompt_references_supported_sp_tools(monke
     assert "harvest, negate, or leave unchanged" in prompt_text
     assert "manual and negative targeting context" in prompt_text
     assert "terms left unchanged with reasons" in prompt_text
+
+
+@pytest.mark.asyncio
+async def test_auth_profile_setup_prompt_references_profile_discovery_tools(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "amazon_ads_mcp.server.builtin_prompts.get_auth_manager",
+        lambda: SimpleNamespace(provider=SimpleNamespace(provider_type="direct")),
+    )
+    server = FastMCP("test")
+
+    await register_all_builtin_prompts(server)
+
+    rendered = await server.render_prompt("auth_profile_setup")
+    prompt_text = rendered.messages[0].content.text
+
+    assert "summarize_profiles" in prompt_text
+    assert "search_profiles" in prompt_text
+    assert "page_profiles" in prompt_text
+    assert "set_active_profile" in prompt_text

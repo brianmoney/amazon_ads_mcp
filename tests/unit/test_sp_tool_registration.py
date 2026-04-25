@@ -7,6 +7,11 @@ from amazon_ads_mcp.tools.sp import register_all_sp_tools
 from fastmcp import FastMCP
 
 
+def _assert_contains(text: str, *parts: str) -> None:
+    for part in parts:
+        assert part in text
+
+
 @pytest.mark.asyncio
 async def test_register_all_sp_tools_exposes_read_tool_names():
     server = FastMCP("test")
@@ -42,7 +47,19 @@ async def test_register_all_sp_tools_publishes_impression_share_resume_input():
     assert impression_share_tool.parameters["properties"]["resume_from_report_id"] == {
         "anyOf": [{"type": "string"}, {"type": "null"}],
         "default": None,
+        "description": (
+            "Known report_id to resume instead of creating a new report. Use "
+            "the report_id returned by an earlier timeout or in-progress "
+            "response."
+        ),
     }
+    _assert_contains(
+        impression_share_tool.parameters["properties"]["timeout_seconds"][
+            "description"
+        ],
+        "Server-side polling timeout for this call only.",
+        "resume_from_report_id",
+    )
 
 
 @pytest.mark.asyncio
@@ -57,7 +74,17 @@ async def test_register_all_sp_tools_publishes_budget_history_resume_input():
     assert budget_tool.parameters["properties"]["resume_from_report_id"] == {
         "anyOf": [{"type": "string"}, {"type": "null"}],
         "default": None,
+        "description": (
+            "Known report_id to resume instead of creating a new report. Use "
+            "the report_id returned by an earlier timeout or in-progress "
+            "response."
+        ),
     }
+    _assert_contains(
+        budget_tool.parameters["properties"]["timeout_seconds"]["description"],
+        "Server-side polling timeout for this call only.",
+        "resume_from_report_id",
+    )
 
 
 @pytest.mark.asyncio
@@ -73,11 +100,33 @@ async def test_register_all_sp_tools_publishes_keyword_resume_input_and_status_t
     assert keyword_tool.parameters["properties"]["resume_from_report_id"] == {
         "anyOf": [{"type": "string"}, {"type": "null"}],
         "default": None,
+        "description": (
+            "Known report_id to resume instead of creating a new report. Use "
+            "the report_id returned by an earlier timeout or in-progress "
+            "response."
+        ),
     }
+    _assert_contains(
+        keyword_tool.description,
+        "manual keyword rows only",
+        "auto-targeting campaigns can legitimately return zero rows",
+    )
+    _assert_contains(
+        keyword_tool.parameters["properties"]["timeout_seconds"]["description"],
+        "Server-side polling timeout for this call only.",
+        "resume_from_report_id",
+    )
     assert status_tool is not None
     assert status_tool.parameters == {
         "additionalProperties": False,
-        "properties": {"report_id": {"type": "string"}},
+        "properties": {
+            "report_id": {
+                "description": (
+                    "Known Sponsored Products report_id returned by a report tool."
+                ),
+                "type": "string",
+            }
+        },
         "required": ["report_id"],
         "type": "object",
     }
@@ -95,7 +144,89 @@ async def test_register_all_sp_tools_publishes_placement_resume_input():
     assert placement_tool.parameters["properties"]["resume_from_report_id"] == {
         "anyOf": [{"type": "string"}, {"type": "null"}],
         "default": None,
+        "description": (
+            "Known report_id to resume instead of creating a new report. Use "
+            "the report_id returned by an earlier timeout or in-progress "
+            "response."
+        ),
     }
+    _assert_contains(
+        placement_tool.parameters["properties"]["timeout_seconds"]["description"],
+        "Server-side polling timeout for this call only.",
+        "resume_from_report_id",
+    )
+
+
+@pytest.mark.asyncio
+async def test_register_all_sp_tools_publishes_nested_write_metadata():
+    server = FastMCP("test")
+
+    await register_all_sp_tools(server)
+
+    adjust_tool = await server.get_tool("adjust_keyword_bids")
+    add_tool = await server.get_tool("add_keywords")
+
+    adjustments = adjust_tool.parameters["properties"]["adjustments"]
+    adjustment_items = adjustments["items"]
+    keyword_items = add_tool.parameters["properties"]["keywords"]["items"]
+
+    _assert_contains(
+        adjust_tool.description,
+        "previous_bid or prior_bid",
+        "live preflight bid observed at write time",
+    )
+    assert adjust_tool.parameters["required"] == ["adjustments"]
+    _assert_contains(adjustments["description"], "keyword_id, new_bid, reason?")
+    assert adjustment_items["required"] == ["keyword_id", "new_bid"]
+    _assert_contains(
+        adjustment_items["properties"]["new_bid"]["description"],
+        "0.02 to 100.00",
+    )
+
+    _assert_contains(
+        add_tool.description,
+        "EXACT, PHRASE, or BROAD",
+        "0.02 to 100.00",
+    )
+    assert add_tool.parameters["required"] == [
+        "campaign_id",
+        "ad_group_id",
+        "keywords",
+    ]
+    _assert_contains(
+        add_tool.parameters["properties"]["campaign_id"]["description"],
+        "campaign ID",
+    )
+    _assert_contains(
+        keyword_items["properties"]["match_type"]["description"],
+        "EXACT, PHRASE, or BROAD",
+        "Defaults to EXACT",
+    )
+    _assert_contains(
+        keyword_items["properties"]["bid"]["description"],
+        "0.02 to 100.00",
+    )
+
+
+@pytest.mark.asyncio
+async def test_register_all_sp_tools_publishes_campaign_state_guidance():
+    server = FastMCP("test")
+
+    await register_all_sp_tools(server)
+
+    tool = await server.get_tool("list_campaigns")
+
+    _assert_contains(
+        tool.description,
+        "ENABLED, PAUSED, or ARCHIVED",
+        "leaves state unfiltered when omitted",
+    )
+    _assert_contains(
+        tool.parameters["properties"]["campaign_states"]["description"],
+        "Accepted values: ENABLED, PAUSED, or ARCHIVED.",
+        "normalized to uppercase",
+        "Omit this filter",
+    )
 
 
 @pytest.fixture
@@ -142,6 +273,13 @@ async def test_server_builder_publishes_impression_share_resume_input(builder):
     impression_share_tool = await server.get_tool("get_impression_share_report")
 
     assert "resume_from_report_id" in impression_share_tool.parameters["properties"]
+    _assert_contains(
+        impression_share_tool.parameters["properties"]["timeout_seconds"][
+            "description"
+        ],
+        "Server-side polling timeout for this call only.",
+        "resume_from_report_id",
+    )
 
 
 @pytest.mark.asyncio
@@ -151,6 +289,11 @@ async def test_server_builder_publishes_budget_history_resume_input(builder):
     budget_tool = await server.get_tool("get_campaign_budget_history")
 
     assert "resume_from_report_id" in budget_tool.parameters["properties"]
+    _assert_contains(
+        budget_tool.parameters["properties"]["timeout_seconds"]["description"],
+        "Server-side polling timeout for this call only.",
+        "resume_from_report_id",
+    )
 
 
 @pytest.mark.asyncio
@@ -161,6 +304,11 @@ async def test_server_builder_publishes_keyword_resume_input_and_status_tool(bui
     tool_names = {tool.name for tool in await server.list_tools()}
 
     assert "resume_from_report_id" in keyword_tool.parameters["properties"]
+    _assert_contains(
+        keyword_tool.description,
+        "manual keyword rows only",
+        "auto-targeting campaigns can legitimately return zero rows",
+    )
     assert "sp_report_status" in tool_names
 
 
@@ -171,3 +319,49 @@ async def test_server_builder_publishes_placement_resume_input(builder):
     placement_tool = await server.get_tool("get_placement_report")
 
     assert "resume_from_report_id" in placement_tool.parameters["properties"]
+    _assert_contains(
+        placement_tool.parameters["properties"]["timeout_seconds"]["description"],
+        "Server-side polling timeout for this call only.",
+        "resume_from_report_id",
+    )
+
+
+@pytest.mark.asyncio
+async def test_server_builder_publishes_nested_sp_write_metadata(builder):
+    server = await builder.build()
+
+    adjust_tool = await server.get_tool("adjust_keyword_bids")
+    add_tool = await server.get_tool("add_keywords")
+
+    adjustment_items = adjust_tool.parameters["properties"]["adjustments"][
+        "items"
+    ]
+    keyword_items = add_tool.parameters["properties"]["keywords"]["items"]
+
+    _assert_contains(
+        adjust_tool.description,
+        "previous_bid or prior_bid",
+        "live preflight bid observed at write time",
+    )
+    _assert_contains(
+        adjustment_items["properties"]["new_bid"]["description"],
+        "0.02 to 100.00",
+    )
+    _assert_contains(
+        keyword_items["properties"]["match_type"]["description"],
+        "EXACT, PHRASE, or BROAD",
+    )
+
+
+@pytest.mark.asyncio
+async def test_server_builder_publishes_campaign_state_metadata(builder):
+    server = await builder.build()
+
+    tool = await server.get_tool("list_campaigns")
+
+    _assert_contains(
+        tool.parameters["properties"]["campaign_states"]["description"],
+        "ENABLED, PAUSED, or ARCHIVED.",
+        "normalized to uppercase",
+        "Omit this filter",
+    )

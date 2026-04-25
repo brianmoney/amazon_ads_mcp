@@ -288,6 +288,40 @@ class TestInMemoryToolDiscovery:
             assert get_region_tool.description is not None
             assert len(get_region_tool.description) > 0
 
+    @pytest.mark.asyncio
+    async def test_list_tools_publishes_enriched_sp_metadata(self, mcp_server):
+        """Verify tool discovery exposes enriched SP metadata."""
+        from fastmcp import Client
+
+        async with Client(mcp_server) as client:
+            tools = await client.list_tools()
+
+            keyword_tool = next(
+                (t for t in tools if t.name == "get_keyword_performance"),
+                None,
+            )
+            adjust_tool = next(
+                (t for t in tools if t.name == "adjust_keyword_bids"),
+                None,
+            )
+
+            assert keyword_tool is not None
+            assert adjust_tool is not None
+            assert "manual keyword rows only" in keyword_tool.description
+            assert (
+                "Server-side polling timeout for this call only."
+                in keyword_tool.inputSchema["properties"]["timeout_seconds"]
+                ["description"]
+            )
+            adjustments = adjust_tool.inputSchema["properties"]["adjustments"]
+            assert (
+                "keyword_id, new_bid, reason?" in adjustments["description"]
+            )
+            assert (
+                "0.02 to 100.00"
+                in adjustments["items"]["properties"]["new_bid"]["description"]
+            )
+
 
 class TestInMemoryErrorHandling:
     """Test error handling via in-memory client."""
