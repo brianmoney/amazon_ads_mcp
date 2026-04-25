@@ -78,6 +78,17 @@ Rules:
 
 ---
 
+## `/opsx-ff` handoff contract
+
+1. Create all apply-ready artifacts under `openspec/changes/<change-id>/`.
+2. Commit those artifacts in `internal/` with `spec(<change-id>): define OpenSpec change`.
+3. Commit the parent `internal` gitlink update with the same message.
+4. If `../<change-id>` does not exist, create it.
+5. If `../<change-id>` already exists, fast-forward the parent worktree and its `internal/` submodule to the new spec commits.
+6. Verify the change directory is visible from the implementation worktree and both repos are clean before handing off.
+
+---
+
 ## `/opsx-ff` agent instructions
 
 Run `/opsx-ff` from the main project directory.
@@ -108,7 +119,7 @@ git diff --cached --name-only
 git commit -m "spec(<change-id>): define OpenSpec change"
 ```
 
-Then create a dedicated implementation worktree:
+If `../<change-id>` does not already exist, create a dedicated implementation worktree:
 
 ```bash
 git worktree add ../<change-id> -b feature/<change-id>
