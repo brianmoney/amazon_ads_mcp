@@ -5,7 +5,7 @@ including authentication methods, API endpoints, and server configuration.
 Settings are loaded from environment variables and .env files.
 """
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 import os
 
@@ -205,6 +205,119 @@ class Settings(BaseSettings):
         description="Enable response caching for safe read-only tools",
     )
 
+    # Warehouse worker configuration
+    warehouse_database_dsn: Optional[str] = Field(
+        None,
+        validation_alias=AliasChoices(
+            "WAREHOUSE_DATABASE_DSN",
+            "WAREHOUSE_POSTGRES_DSN",
+            "DATABASE_URL",
+        ),
+        description="Postgres DSN used by the warehouse worker",
+    )
+    warehouse_worker_enabled: bool = Field(
+        False,
+        alias="WAREHOUSE_WORKER_ENABLED",
+        description="Enable the warehouse worker runtime",
+    )
+    warehouse_scheduler_enabled: bool = Field(
+        True,
+        alias="WAREHOUSE_SCHEDULER_ENABLED",
+        description="Enable APScheduler-driven warehouse cycles",
+    )
+    warehouse_validation_enabled: bool = Field(
+        False,
+        alias="WAREHOUSE_VALIDATION_ENABLED",
+        description="Enable warehouse-versus-live validation runs",
+    )
+    warehouse_worker_id: Optional[str] = Field(
+        None,
+        alias="WAREHOUSE_WORKER_ID",
+        description="Stable worker identifier used for job claims",
+    )
+    warehouse_profile_ids: str | list[str] = Field(
+        default_factory=list,
+        alias="WAREHOUSE_PROFILE_IDS",
+        description="Comma-separated profile IDs to ingest; empty means all visible profiles",
+    )
+    warehouse_regions: str | list[str] = Field(
+        default_factory=list,
+        alias="WAREHOUSE_REGIONS",
+        description="Comma-separated region codes used by the worker",
+    )
+    warehouse_dimension_refresh_minutes: int = Field(
+        60,
+        alias="WAREHOUSE_DIMENSION_REFRESH_MINUTES",
+        description="Dimension refresh cadence in minutes",
+    )
+    warehouse_report_refresh_minutes: int = Field(
+        360,
+        alias="WAREHOUSE_REPORT_REFRESH_MINUTES",
+        description="Report-based fact refresh cadence in minutes",
+    )
+    warehouse_portfolio_usage_refresh_minutes: int = Field(
+        60,
+        alias="WAREHOUSE_PORTFOLIO_USAGE_REFRESH_MINUTES",
+        description="Portfolio usage snapshot cadence in minutes",
+    )
+    warehouse_validation_refresh_minutes: int = Field(
+        720,
+        alias="WAREHOUSE_VALIDATION_REFRESH_MINUTES",
+        description="Validation cadence in minutes",
+    )
+    warehouse_report_window_days: int = Field(
+        1,
+        alias="WAREHOUSE_REPORT_WINDOW_DAYS",
+        description="Window size used for report-based warehouse loads",
+    )
+    warehouse_claim_timeout_seconds: int = Field(
+        1800,
+        alias="WAREHOUSE_CLAIM_TIMEOUT_SECONDS",
+        description="Seconds before a running job can be reclaimed",
+    )
+    warehouse_heartbeat_seconds: int = Field(
+        60,
+        alias="WAREHOUSE_HEARTBEAT_SECONDS",
+        description="Heartbeat cadence used by long-running warehouse jobs",
+    )
+    warehouse_report_poll_timeout_seconds: float = Field(
+        30.0,
+        alias="WAREHOUSE_REPORT_POLL_TIMEOUT_SECONDS",
+        description="Bounded per-cycle report polling timeout",
+    )
+
+    @field_validator("warehouse_profile_ids", "warehouse_regions", mode="before")
+    @classmethod
+    def parse_csv_lists(cls, value: Any) -> list[str]:
+        """Normalize env-style comma-separated lists into compact string arrays."""
+        if value in (None, ""):
+            return []
+        if isinstance(value, str):
+            values = value.split(",")
+        elif isinstance(value, list):
+            values = value
+        else:
+            values = [value]
+
+        normalized: list[str] = []
+        for item in values:
+            text = str(item or "").strip()
+            if text:
+                normalized.append(text)
+        return normalized
+
+    @field_validator("warehouse_regions")
+    @classmethod
+    def validate_warehouse_regions(cls, value: list[str]) -> list[str]:
+        """Normalize worker regions to the supported routing set."""
+        normalized = [item.lower() for item in value]
+        invalid = [item for item in normalized if item not in {"na", "eu", "fe"}]
+        if invalid:
+            raise ValueError(
+                "warehouse_regions must contain only: na, eu, fe"
+            )
+        return normalized
+
     @field_validator("auth_method")
     @classmethod
     def auto_detect_auth_method(cls, v: str, info) -> str:
@@ -380,6 +493,20 @@ class Settings(BaseSettings):
         return self.oauth_redirect_uri or (
             f"http://localhost:{self.runtime_port}/auth/callback"
         )
+
+    @property
+    def effective_warehouse_regions(self) -> list[str]:
+        """Return the explicit worker regions or fall back to the active default."""
+        if isinstance(self.warehouse_regions, list) and self.warehouse_regions:
+            return self.warehouse_regions
+        return [self.amazon_ads_region]
+
+    @property
+    def effective_warehouse_profile_ids(self) -> list[str]:
+        """Return the configured worker profile ids as a normalized list."""
+        if isinstance(self.warehouse_profile_ids, list):
+            return self.warehouse_profile_ids
+        return []
 
 
 settings = Settings()

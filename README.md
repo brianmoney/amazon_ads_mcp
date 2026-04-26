@@ -108,6 +108,12 @@ Local process:
 uv run python -m amazon_ads_mcp.server.mcp_server --transport http --port 9080
 ```
 
+Warehouse worker:
+
+```bash
+uv run python -m amazon_ads_mcp.warehouse.worker_entrypoint
+```
+
 The GitHub and package name is `amazon-ads-mcp`, but the Python module path is `amazon_ads_mcp`, so `python -m` commands use underscores, not hyphens.
 
 If you prefer the installed console script name instead of `python -m`, this also works:
@@ -224,6 +230,65 @@ AUTH_METHOD=openbridge OPENBRIDGE_REFRESH_TOKEN="your-openbridge-token" docker c
 `AMAZON_ADS_AUTH_METHOD` is accepted as a legacy alias for `AUTH_METHOD`.
 
 ## Development
+
+## Warehouse Worker
+
+The warehouse worker is a separate process from the MCP server. It keeps the
+live tool surface unchanged while periodically ingesting phase 1 Sponsored
+Products and portfolio data into Postgres.
+
+Required warehouse environment:
+
+```bash
+WAREHOUSE_WORKER_ENABLED=true
+WAREHOUSE_DATABASE_DSN="postgresql+psycopg://user:pass@localhost:5432/amazon_ads"
+WAREHOUSE_PROFILE_IDS="1234567890"
+WAREHOUSE_REGIONS="na"
+```
+
+Optional warehouse cadence and validation settings:
+
+```bash
+WAREHOUSE_SCHEDULER_ENABLED=true
+WAREHOUSE_VALIDATION_ENABLED=true
+WAREHOUSE_DIMENSION_REFRESH_MINUTES=60
+WAREHOUSE_REPORT_REFRESH_MINUTES=360
+WAREHOUSE_PORTFOLIO_USAGE_REFRESH_MINUTES=60
+WAREHOUSE_VALIDATION_REFRESH_MINUTES=720
+WAREHOUSE_REPORT_WINDOW_DAYS=1
+WAREHOUSE_CLAIM_TIMEOUT_SECONDS=1800
+WAREHOUSE_REPORT_POLL_TIMEOUT_SECONDS=30
+```
+
+Start the worker after the Postgres DSN is configured:
+
+```bash
+uv run python -m amazon_ads_mcp.warehouse.worker_entrypoint
+```
+
+Run one cycle without APScheduler:
+
+```bash
+uv run python -m amazon_ads_mcp.warehouse.worker_entrypoint --run-once
+```
+
+The worker applies Alembic migrations on startup by default, loads warehouse
+data in this order, and can optionally run warehouse-versus-live validation:
+
+- `ads_profile`
+- `list_portfolios`
+- `list_campaigns`
+- `sp_keyword`
+- `get_keyword_performance`
+- `get_search_term_report`
+- `get_campaign_budget_history`
+- `get_placement_report`
+- `get_impression_share_report`
+- `get_portfolio_budget_usage`
+
+Validation compares warehouse rows to the current live MCP outputs for the same
+profile, region, and report window or portfolio scope without changing the live
+tool contracts.
 
 Required validation flow before committing:
 
