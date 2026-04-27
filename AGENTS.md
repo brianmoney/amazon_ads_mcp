@@ -1,29 +1,34 @@
-## OpenSpec + Git worktree discipline
+## OpenSpec + Git discipline
 
 This project uses OpenSpec with `/opsx-ff`, `/opsx-apply`, `/opsx-verify`, and `/opsx-archive`.
 
 Agents working in `amazon-ads-mcp` must adhere to the OpenSpec workflow. Do not bypass proposal, implementation, verification, or archive steps for work that belongs in OpenSpec.
 
+### Repo map
+
+This repo layout is easy to misread. Treat these paths as different Git owners:
+
+- `amazon-ads-mcp/` is the public code repo.
+- `amazon-ads-mcp/internal/` is a Git submodule checkout of the private repo `amazon-ads-mcp-private`.
+- `amazon-ads-mcp/openspec/` is a symlink to `amazon-ads-mcp/internal/openspec/`.
+- Editing `openspec/...` changes files owned by the private `internal/` repo, not by the public parent repo.
+- The parent repo never contains the OpenSpec file contents directly. It only records the `internal` gitlink SHA after the submodule commit.
+
+If this distinction is fuzzy, agents will stage the wrong repo. Always check both repos before and after OpenSpec work:
+
+```bash
+git status --short
+git -C internal status --short
+```
+
 ### Core rule
 
-Each OpenSpec change gets its own Git branch and worktree.
+Work in place from the main project directory. Do not create per-change branches or worktrees unless the user explicitly asks for them.
 
-- Planning starts in the main project directory.
-- Implementation, verification, archive, and final commit happen in the change worktree.
-- Do not run multiple OpenCode sessions against the same worktree for the same change.
-- Never mix unrelated OpenSpec changes in one branch or one commit.
-
-### OpenSpec path and submodule rule
-
-In this repo, `openspec/` is a symlink to `internal/openspec/`.
-
-- `internal/` is a Git submodule that points at the private repo.
-- OpenSpec file contents are Git-tracked by the `internal/` repo, not by the parent repo.
-- The parent repo only tracks the `internal` gitlink update after the submodule commit.
-- Read or edit via `openspec/...` if convenient, but treat `internal/openspec/...` as the real Git-tracked path.
-- Before any OpenSpec commit, inspect both `git status --short` and `git -C internal status --short`.
-- Do not expect `git add openspec/...` in the parent repo to stage OpenSpec files. Use `git -C internal add ...` for OpenSpec files, then `git add internal` in the parent repo.
-- Keep the parent repo branch/worktree and the `internal/` branch aligned to the same `<change-id>`.
+- Use explicit path staging and commit only the current OpenSpec change.
+- A dirty repo is not by itself a blocker. Ignore unrelated uncommitted files and leave them unstaged.
+- Stop only if unrelated changes overlap the exact paths you need for the current change or make validation ambiguous.
+- Keep the OpenSpec commit in `internal/` and the matching `internal` gitlink commit in the parent repo paired.
 
 ### Naming convention
 
@@ -31,17 +36,17 @@ Use the OpenSpec change id consistently:
 
 ```bash
 <change-id>
-feature/<change-id>
-../<change-id>
+spec/<change-id>
 ```
 
 Example:
 
 ```bash
 add-user-settings-panel
-feature/add-user-settings-panel
-../add-user-settings-panel
+spec/add-user-settings-panel
 ```
+
+The `spec/<change-id>` tag is a local marker for the committed spec snapshot. Do not push tags unless the user explicitly asks.
 
 ---
 
@@ -74,7 +79,9 @@ Rules:
 - Keep the first line under 100 characters.
 - Do not use vague messages like `update`, `changes`, `fix stuff`, or `wip`.
 - Do not commit unless the current role explicitly allows committing.
-- When OpenSpec files change, use the lifecycle commit message in `internal/` for the actual OpenSpec files, then reuse the same message in the parent repo for the matching `internal` gitlink update.
+- When OpenSpec files change, commit in `internal/` first for the actual OpenSpec files, then reuse the same message in the parent repo for the matching `internal` gitlink update.
+- `/opsx-ff` must end with the `spec(<change-id>): define OpenSpec change` commit sequence.
+- `/opsx-archive` must end with the `archive(<change-id>): archive completed OpenSpec change` commit sequence.
 
 ---
 
@@ -82,10 +89,10 @@ Rules:
 
 1. Create all apply-ready artifacts under `openspec/changes/<change-id>/`.
 2. Commit those artifacts in `internal/` with `spec(<change-id>): define OpenSpec change`.
-3. Commit the parent `internal` gitlink update with the same message.
-4. If `../<change-id>` does not exist, create it.
-5. If `../<change-id>` already exists, fast-forward the parent worktree and its `internal/` submodule to the new spec commits.
-6. Verify the change directory is visible from the implementation worktree and both repos are clean before handing off.
+3. Create or move the local `spec/<change-id>` tag to that `internal/` commit.
+4. Commit the parent `internal` gitlink update with the same message.
+5. Create or move the local `spec/<change-id>` tag in the parent repo to the matching gitlink commit.
+6. Hand off the change id. Implementation continues in the main repo, not in a separate worktree.
 
 ---
 
@@ -99,55 +106,34 @@ The `/opsx-ff` agent may create or update files under:
 openspec/changes/<change-id>/
 ```
 
-The visible `openspec/...` path resolves into `internal/openspec/...`, so the actual Git-tracked proposal files live in the `internal/` submodule.
+The visible `openspec/...` path resolves into `internal/openspec/...`, so the actual Git-tracked proposal files live in the private `internal/` submodule.
 
 The `/opsx-ff` agent must not implement application code changes.
 
-After creating the OpenSpec change, immediately commit only the new proposal files:
+After creating the OpenSpec change, immediately commit only the proposal files for the current change. Do not stop just because other files are dirty; leave unrelated files unstaged.
 
 ```bash
 git status --short
 git -C internal status --short
-git -C internal switch -c feature/<change-id> || git -C internal switch feature/<change-id>
-git -C internal add openspec/changes/<change-id>
+
+git -C internal add -- openspec/changes/<change-id>
 git -C internal diff --cached --name-only
 git -C internal commit -m "spec(<change-id>): define OpenSpec change"
+git -C internal tag -f "spec/<change-id>"
 
-git status --short
-git add internal
+git add -- internal
 git diff --cached --name-only
 git commit -m "spec(<change-id>): define OpenSpec change"
+git tag -f "spec/<change-id>"
 ```
 
-If `../<change-id>` does not already exist, create a dedicated implementation worktree:
-
-```bash
-git worktree add ../<change-id> -b feature/<change-id>
-```
-
-Then instruct the implementer to launch OpenCode from the worktree:
-
-```bash
-cd ../<change-id>
-git submodule update --init --recursive internal
-git -C internal switch -c feature/<change-id> || git -C internal switch feature/<change-id>
-opencode
-```
-
-Stop if either `git status --short` or `git -C internal status --short` shows unrelated changes.
+Stop only if unrelated changes already touch `openspec/changes/<change-id>` or otherwise prevent a clean spec commit for the current change.
 
 ---
 
 ## `/opsx-apply` agent instructions
 
-Run `/opsx-apply` only from the change worktree:
-
-```bash
-cd ../<change-id>
-git submodule update --init --recursive internal
-git -C internal switch -c feature/<change-id> || git -C internal switch feature/<change-id>
-opencode
-```
+Run `/opsx-apply` from the main project directory.
 
 The apply agent may edit:
 
@@ -163,6 +149,7 @@ The apply agent must not:
 - rebase
 - run destructive Git cleanup commands
 - modify files unrelated to the current OpenSpec change
+- create extra branches or worktrees for the change
 
 Before editing, inspect:
 
@@ -170,6 +157,8 @@ Before editing, inspect:
 git status --short
 git -C internal status --short
 ```
+
+Unrelated dirty files are not an automatic blocker. Keep the current change scoped to its own files and do not stage or commit as part of `/opsx-apply`.
 
 Before finishing, report:
 
@@ -184,7 +173,7 @@ git -C internal diff --stat
 
 ## `/opsx-verify` agent instructions
 
-Run `/opsx-verify` from the change worktree, not the main project directory.
+Run `/opsx-verify` from the main project directory.
 
 Before verification:
 
@@ -209,10 +198,10 @@ Also run the relevant project checks, such as tests, linters, type checks, and b
 
 Stop if:
 
-- unrelated modified files are present in either repo
 - OpenSpec validation fails
 - relevant tests fail
 - the implementation does not match the accepted OpenSpec change
+- unrelated modified files overlap the paths needed for the current verification or make the result ambiguous
 
 The verify agent must not commit unless explicitly instructed by the user.
 
@@ -220,7 +209,7 @@ The verify agent must not commit unless explicitly instructed by the user.
 
 ## `/opsx-archive` agent instructions
 
-Run `/opsx-archive` from the change worktree after verification succeeds.
+Run `/opsx-archive` from the main project directory after verification succeeds.
 
 Before archiving:
 
@@ -232,9 +221,11 @@ git -C internal status --short
 git -C internal diff --name-only
 ```
 
-After `/opsx-archive`, create the archive commit from the change worktree.
+After `/opsx-archive`, create the archive commit in place from the main project directory.
 
 Use explicit paths. Do not use `git add .`.
+
+Ignore unrelated dirty files and leave them unstaged. Only stop if they overlap files that belong to the current change.
 
 Recommended flow:
 
@@ -243,8 +234,8 @@ git status --short
 git -C internal status --short
 
 # Stage and commit the OpenSpec archive files inside the internal submodule first.
-git -C internal add openspec/specs/
-git -C internal add openspec/changes/<change-id>
+git -C internal add -- openspec/specs/
+git -C internal add -- openspec/changes/<change-id>
 git -C internal diff --cached --name-only
 git -C internal diff --cached --stat
 
@@ -253,8 +244,8 @@ openspec validate --strict
 git -C internal commit -m "archive(<change-id>): archive completed OpenSpec change"
 
 # Stage only parent-repo files belonging to the verified change plus the updated submodule pointer.
-git add <verified-implementation-files>
-git add internal
+git add -- <verified-implementation-files>
+git add -- internal
 
 git diff --cached --name-only
 git diff --cached --stat
@@ -269,7 +260,7 @@ Before committing, confirm:
 - all staged files belong to `<change-id>`
 - OpenSpec validation passes
 - relevant tests pass
-- no unrelated changes are included
+- no unrelated changes are included in the staged set
 - no secrets, generated junk, logs, local config, or build artifacts are staged
 
 Do not push unless explicitly instructed.
@@ -283,10 +274,12 @@ Agents must use explicit staging.
 Allowed:
 
 ```bash
-git add path/to/file1 path/to/file2
-git -C internal add openspec/changes/<change-id>
-git -C internal add openspec/specs/
-git add internal
+git add -- path/to/file1 path/to/file2
+git -C internal add -- openspec/changes/<change-id>
+git -C internal add -- openspec/specs/
+git add -- internal
+git restore --staged -- path/to/file
+git -C internal restore --staged -- path/to/file
 ```
 
 Forbidden unless explicitly approved:
@@ -297,17 +290,20 @@ git add openspec/specs/
 git add .
 git add -A
 git add -u
+git switch -c feature/<change-id>
+git worktree add ../<change-id>
 ```
 
 Before every commit, run:
 
 ```bash
+git -C internal diff --cached --name-only
 git diff --cached --name-only
 ```
 
 If any staged file is unrelated to the current OpenSpec change, unstage it before committing.
 
-For Git-related questions or non-routine Git operations, agents should consult the installed `git-workflow` skill. However, these instruction takes precedence over the skill for this project’s required OpenSpec workflow, worktree usage, staging rules, commit timing, and archive commits. 
+For Git-related questions or non-routine Git operations, agents should consult the installed `git-workflow` skill. However, these instructions take precedence over the skill for this project's required OpenSpec workflow, submodule ownership rules, tag usage, staging rules, commit timing, and archive commits.
 
 ---
 

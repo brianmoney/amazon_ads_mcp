@@ -179,6 +179,8 @@ The refresh token can also be passed per-request via the `Authorization: Bearer`
 ## Docker Direct Auth
 
 The checked-in Docker workflow builds from local source and defaults to direct Amazon Ads auth.
+Warehouse ingestion infrastructure is opt-in under the `warehouse` compose
+profile so the default server workflow stays lightweight.
 
 Required `.env` values:
 
@@ -264,6 +266,29 @@ Start the worker after the Postgres DSN is configured:
 
 ```bash
 uv run python -m amazon_ads_mcp.warehouse.worker_entrypoint
+```
+
+Start a local Postgres instance and recurring warehouse worker through Docker
+compose:
+
+```bash
+docker compose --profile warehouse up -d postgres warehouse-worker
+docker compose --profile warehouse logs -f warehouse-worker
+```
+
+Run a one-off ingestion cycle through Docker compose:
+
+```bash
+docker compose --profile warehouse run --rm warehouse-worker --run-once
+```
+
+The compose-managed worker automatically points at the bundled Postgres service
+using `WAREHOUSE_POSTGRES_DB`, `WAREHOUSE_POSTGRES_USER`, and
+`WAREHOUSE_POSTGRES_PASSWORD` from `.env`. When you run the worker directly on
+the host, keep using a localhost DSN such as:
+
+```bash
+WAREHOUSE_DATABASE_DSN="postgresql+psycopg://amazon_ads:amazon_ads@localhost:5432/amazon_ads"
 ```
 
 Run one cycle without APScheduler:

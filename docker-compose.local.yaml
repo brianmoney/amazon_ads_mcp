@@ -37,3 +37,47 @@ services:
       "--host", "0.0.0.0",
       "--port", "${PORT:-9080}"
     ]
+
+  postgres:
+    image: postgres:16
+    profiles: ["warehouse"]
+    container_name: amazon-ads-postgres-local
+    environment:
+      - POSTGRES_DB=${WAREHOUSE_POSTGRES_DB:-amazon_ads}
+      - POSTGRES_USER=${WAREHOUSE_POSTGRES_USER:-amazon_ads}
+      - POSTGRES_PASSWORD=${WAREHOUSE_POSTGRES_PASSWORD:-amazon_ads}
+    ports:
+      - "${WAREHOUSE_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./.postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${WAREHOUSE_POSTGRES_USER:-amazon_ads} -d ${WAREHOUSE_POSTGRES_DB:-amazon_ads}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  warehouse-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: amazon-ads-mcp:local
+    profiles: ["warehouse"]
+    container_name: amazon-ads-mcp-warehouse-local
+    env_file:
+      - .env
+    environment:
+      - AUTH_METHOD=${AUTH_METHOD:-direct}
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      - AMAZON_ADS_TOKEN_PERSIST=${AMAZON_ADS_TOKEN_PERSIST:-true}
+      - AMAZON_ADS_CACHE_DIR=/app/.cache/amazon-ads-mcp
+      - WAREHOUSE_WORKER_ENABLED=true
+      - WAREHOUSE_DATABASE_DSN=postgresql+psycopg://${WAREHOUSE_POSTGRES_USER:-amazon_ads}:${WAREHOUSE_POSTGRES_PASSWORD:-amazon_ads}@postgres:5432/${WAREHOUSE_POSTGRES_DB:-amazon_ads}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./.cache:/app/.cache
+    command: [
+      "python", "-m", "amazon_ads_mcp.warehouse.worker_entrypoint"
+    ]
