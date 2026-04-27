@@ -243,7 +243,7 @@ Required warehouse environment:
 
 ```bash
 WAREHOUSE_WORKER_ENABLED=true
-WAREHOUSE_DATABASE_DSN="postgresql+psycopg://user:pass@localhost:5432/amazon_ads"
+WAREHOUSE_DATABASE_DSN="postgresql+psycopg://amazon_ads:amazon_ads@localhost:5433/amazon_ads"
 WAREHOUSE_PROFILE_IDS="1234567890"
 WAREHOUSE_REGIONS="na"
 ```
@@ -259,7 +259,7 @@ WAREHOUSE_PORTFOLIO_USAGE_REFRESH_MINUTES=60
 WAREHOUSE_VALIDATION_REFRESH_MINUTES=720
 WAREHOUSE_REPORT_WINDOW_DAYS=1
 WAREHOUSE_CLAIM_TIMEOUT_SECONDS=1800
-WAREHOUSE_REPORT_POLL_TIMEOUT_SECONDS=30
+WAREHOUSE_REPORT_POLL_TIMEOUT_SECONDS=360
 ```
 
 Start the worker after the Postgres DSN is configured:
@@ -288,7 +288,7 @@ using `WAREHOUSE_POSTGRES_DB`, `WAREHOUSE_POSTGRES_USER`, and
 the host, keep using a localhost DSN such as:
 
 ```bash
-WAREHOUSE_DATABASE_DSN="postgresql+psycopg://amazon_ads:amazon_ads@localhost:5432/amazon_ads"
+WAREHOUSE_DATABASE_DSN="postgresql+psycopg://amazon_ads:amazon_ads@localhost:5433/amazon_ads"
 ```
 
 Run one cycle without APScheduler:

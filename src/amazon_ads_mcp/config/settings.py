@@ -281,7 +281,7 @@ class Settings(BaseSettings):
         description="Heartbeat cadence used by long-running warehouse jobs",
     )
     warehouse_report_poll_timeout_seconds: float = Field(
-        30.0,
+        360.0,
         alias="WAREHOUSE_REPORT_POLL_TIMEOUT_SECONDS",
         description="Bounded per-cycle report polling timeout",
     )

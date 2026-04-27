@@ -25,7 +25,7 @@ from .loaders import (
     load_search_terms,
 )
 from .repository import advance_watermark
-from .types import JobScope, ReportRequest
+from .types import ACTIVE_REPORT_STATUSES, JobScope, ReportRequest
 from .utils import default_worker_id, report_window, utcnow
 from .validation import (
     validate_budget_history,
@@ -43,9 +43,21 @@ from .live_views import (
     lookup_live_report_status,
     poll_live_report,
 )
+from ..tools.sp.report_helper import SPReportError
 
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_timeout_status(error_text: str) -> str | None:
+    marker = "(last status: "
+    if marker not in error_text:
+        return None
+    suffix = error_text.split(marker, 1)[1]
+    status = suffix.split(")", 1)[0].strip().lower()
+    if status in ACTIVE_REPORT_STATUSES:
+        return status
+    return None
 
 
 @dataclass(frozen=True)
@@ -363,6 +375,7 @@ class WarehouseWorker:
             time_unit=request_spec["time_unit"],
         )
         durable_reports = DurableReportCoordinator(connection)
+        report_run = None
         try:
             from ..tools.sp.common import get_sp_client, require_sp_context
 
@@ -370,6 +383,7 @@ class WarehouseWorker:
             client = await get_sp_client(auth_manager)
 
             async def run_report_load() -> None:
+                nonlocal report_run
                 report_run = durable_reports.create_or_resume(
                     ingestion_job_id=job.ingestion_job_id,
                     profile_id=profile_id,
@@ -473,6 +487,40 @@ class WarehouseWorker:
                 run_report_load(),
             )
             job_coordinator.complete(job.ingestion_job_id)
+        except SPReportError as exc:
+            resumable_status = _parse_timeout_status(str(exc))
+            if resumable_status and report_run is not None:
+                durable_reports.mark_polled(
+                    report_run.report_run_id,
+                    status=resumable_status,
+                    raw_status=resumable_status.upper(),
+                    status_details="bounded worker poll timeout",
+                    diagnostic={
+                        "error": str(exc),
+                        "timeout_seconds": self.settings.warehouse_report_poll_timeout_seconds,
+                        "resumable": True,
+                    },
+                )
+                job_coordinator.fail(
+                    job.ingestion_job_id,
+                    error_text=str(exc),
+                    diagnostic={
+                        "status": "deferred",
+                        "report_run_id": report_run.report_run_id,
+                        "amazon_report_id": report_run.amazon_report_id,
+                        "surface_name": surface_name,
+                        "reason": str(exc),
+                    },
+                )
+                logger.info(
+                    "Warehouse report %s remains %s after %.1fs; leaving it resumable for the next cycle.",
+                    report_run.amazon_report_id,
+                    resumable_status,
+                    self.settings.warehouse_report_poll_timeout_seconds,
+                )
+                return
+            job_coordinator.fail(job.ingestion_job_id, error_text=str(exc))
+            raise
         except Exception as exc:
             job_coordinator.fail(job.ingestion_job_id, error_text=str(exc))
             raise

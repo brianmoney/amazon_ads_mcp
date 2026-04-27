@@ -55,7 +55,7 @@ services:
       - POSTGRES_USER=${WAREHOUSE_POSTGRES_USER:-amazon_ads}
       - POSTGRES_PASSWORD=${WAREHOUSE_POSTGRES_PASSWORD:-amazon_ads}
     ports:
-      - "${WAREHOUSE_POSTGRES_PORT:-5432}:5432"
+      - "${WAREHOUSE_POSTGRES_PORT:-5433}:5432"
     volumes:
       - warehouse_postgres:/var/lib/postgresql/data
     healthcheck:

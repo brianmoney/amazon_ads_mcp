@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from amazon_ads_mcp.warehouse import worker as worker_module
+from amazon_ads_mcp.tools.sp.report_helper import SPReportError
 
 
 class FakeJobCoordinator:
@@ -150,3 +151,108 @@ async def test_run_with_heartbeat_records_initial_heartbeat():
 
     assert result == "done"
     assert coordinator.heartbeats == ["job-1"]
+
+
+@pytest.mark.asyncio
+async def test_execute_report_surface_completes_when_poll_timeout_is_resumable(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        worker_module,
+        "report_window",
+        lambda settings: (date(2026, 1, 1), date(2026, 1, 2)),
+    )
+
+    class FakeDurableReports:
+        def __init__(self, connection):
+            self.connection = connection
+            self.marked = []
+
+        def create_or_resume(self, **kwargs):
+            return SimpleNamespace(
+                report_run_id="run-1",
+                amazon_report_id="rpt-1",
+            )
+
+        def mark_polled(self, report_run_id, **kwargs):
+            self.marked.append((report_run_id, kwargs))
+            return SimpleNamespace(
+                report_run_id=report_run_id,
+                amazon_report_id="rpt-1",
+            )
+
+        def mark_downloaded(self, *args, **kwargs):
+            raise AssertionError("download should not run for resumable timeout")
+
+    durable = FakeDurableReports(object())
+    monkeypatch.setattr(
+        worker_module,
+        "DurableReportCoordinator",
+        lambda connection: durable,
+    )
+
+    async def fake_lookup(*args, **kwargs):
+        return {"status": "QUEUED", "raw_status": "QUEUED", "status_details": None}
+
+    async def fake_poll(*args, **kwargs):
+        raise SPReportError(
+            "Sponsored Products report rpt-1 timed out while polling after 360.0s "
+            "(last status: QUEUED)."
+        )
+
+    monkeypatch.setattr(worker_module, "lookup_live_report_status", fake_lookup)
+    monkeypatch.setattr(worker_module, "poll_live_report", fake_poll)
+
+    async def fake_get_client(_auth_manager):
+        return object()
+
+    async def unexpected_create(*args, **kwargs):
+        raise AssertionError("create_live_report should not run")
+
+    async def unexpected_download(*args, **kwargs):
+        raise AssertionError("download_live_report_rows should not run")
+
+    async def unexpected_loader(*args, **kwargs):
+        raise AssertionError("loader should not run")
+
+    monkeypatch.setattr(worker_module, "create_live_report", unexpected_create)
+    monkeypatch.setattr(
+        worker_module, "download_live_report_rows", unexpected_download
+    )
+    monkeypatch.setattr(
+        worker_module, "load_keyword_performance", unexpected_loader
+    )
+
+    monkeypatch.setattr(
+        "amazon_ads_mcp.tools.sp.common.require_sp_context",
+        lambda: (object(), "profile-1", "na"),
+    )
+    monkeypatch.setattr(
+        "amazon_ads_mcp.tools.sp.common.get_sp_client",
+        fake_get_client,
+    )
+
+    warehouse_worker = worker_module.WarehouseWorker(
+        settings=SimpleNamespace(
+            warehouse_worker_id="worker-1",
+            warehouse_heartbeat_seconds=60,
+            warehouse_report_poll_timeout_seconds=360.0,
+        )
+    )
+    coordinator = FakeJobCoordinator()
+
+    await warehouse_worker._execute_report_surface(
+        connection=object(),
+        job_coordinator=coordinator,
+        profile_id="profile-1",
+        region="na",
+        surface_name="get_keyword_performance",
+    )
+
+    assert coordinator.completed == []
+    assert len(coordinator.failed) == 1
+    diagnostic = coordinator.failed[0][2]
+    assert diagnostic["status"] == "deferred"
+    assert diagnostic["amazon_report_id"] == "rpt-1"
+    assert durable.marked[-1][1]["status"] == "queued"
+    assert durable.marked[-1][1]["diagnostic"]["resumable"] is True

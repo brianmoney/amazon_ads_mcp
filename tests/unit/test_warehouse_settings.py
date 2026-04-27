@@ -24,9 +24,20 @@ def test_warehouse_regions_must_be_supported(monkeypatch):
 
 @pytest.mark.unit
 def test_effective_warehouse_regions_fall_back_to_default_region(monkeypatch):
-    monkeypatch.delenv("WAREHOUSE_REGIONS", raising=False)
+    monkeypatch.setenv("WAREHOUSE_REGIONS", "")
     monkeypatch.setenv("AMAZON_ADS_REGION", "fe")
 
     settings = Settings()
 
     assert settings.effective_warehouse_regions == ["fe"]
+
+
+@pytest.mark.unit
+def test_warehouse_report_poll_timeout_defaults_to_longer_worker_window(
+    monkeypatch,
+):
+    monkeypatch.delenv("WAREHOUSE_REPORT_POLL_TIMEOUT_SECONDS", raising=False)
+
+    settings = Settings()
+
+    assert settings.warehouse_report_poll_timeout_seconds == 360.0
