@@ -1,6 +1,9 @@
+from datetime import date
+
 import pytest
 
 from amazon_ads_mcp.config.settings import Settings
+from amazon_ads_mcp.warehouse.utils import report_window
 
 
 @pytest.mark.unit
@@ -41,3 +44,17 @@ def test_warehouse_report_poll_timeout_defaults_to_longer_worker_window(
     settings = Settings()
 
     assert settings.warehouse_report_poll_timeout_seconds == 360.0
+
+
+@pytest.mark.unit
+def test_report_window_applies_configured_lag():
+    window_start, window_end = report_window(
+        settings=Settings.model_construct(
+            warehouse_report_window_days=3,
+            warehouse_report_lag_days=2,
+        ),
+        now=date(2026, 4, 28),
+    )
+
+    assert window_start.isoformat() == "2026-04-24"
+    assert window_end.isoformat() == "2026-04-26"

@@ -1,8 +1,10 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, select
 
+from amazon_ads_mcp.warehouse.durability import DurableReportCoordinator
 from amazon_ads_mcp.warehouse.repository import (
     advance_watermark,
     claim_job,
@@ -127,6 +129,53 @@ def test_report_run_can_create_new_attempt_after_release(connection):
         window_end="2026-04-20",
     )
 
+    assert second.report_run_id != first.report_run_id
+
+
+@pytest.mark.unit
+def test_mark_failed_releases_active_scope_for_corrected_retry(connection):
+    scope = JobScope(
+        profile_id="profile-1",
+        region="na",
+        surface_name="get_keyword_performance",
+        job_type="report",
+    )
+    job = create_or_refresh_job(connection, scope)
+    durable_reports = DurableReportCoordinator(connection)
+    request = SimpleNamespace(
+        surface_name="get_keyword_performance",
+        report_type_id="spTargeting",
+        start_date="2026-04-20",
+        end_date="2026-04-20",
+        group_by=["targeting"],
+        columns=["keywordId"],
+        filters=[],
+        time_unit="SUMMARY",
+    )
+
+    first = durable_reports.create_or_resume(
+        ingestion_job_id=job.ingestion_job_id,
+        profile_id="profile-1",
+        region="na",
+        request=request,
+    )
+    failed = durable_reports.mark_failed(
+        first.report_run_id,
+        error_text="bad request",
+        raw_status="HTTP_400",
+        status_details="invalid report configuration",
+        diagnostic={"phase": "create"},
+    )
+
+    second = durable_reports.create_or_resume(
+        ingestion_job_id=job.ingestion_job_id,
+        profile_id="profile-1",
+        region="na",
+        request=request,
+    )
+
+    assert failed.status == "failed"
+    assert failed.active_scope_key is None
     assert second.report_run_id != first.report_run_id
 
 

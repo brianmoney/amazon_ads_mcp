@@ -23,7 +23,12 @@ class FakeResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            response = httpx.Response(self.status_code, request=self.request)
+            response = httpx.Response(
+                self.status_code,
+                request=self.request,
+                json=self._json_data,
+                content=None if self._json_data is not None else self.content,
+            )
             raise httpx.HTTPStatusError(
                 "request failed", request=self.request, response=response
             )
@@ -291,3 +296,34 @@ async def test_create_sp_report_reuses_duplicate_report_id():
     )
 
     assert result == "a15115d8-3da4-49a4-95d5-cc0a3af5f85d"
+
+
+@pytest.mark.asyncio
+async def test_create_sp_report_surfaces_status_and_safe_details():
+    client = FakeReportClient(
+        post_responses=[
+            FakeResponse(
+                status_code=400,
+                json_data={"message": "invalid report configuration"},
+            )
+        ],
+        get_responses=[],
+    )
+
+    with pytest.raises(SPReportError) as exc_info:
+        await create_sp_report(
+            report_type_id="spTargeting",
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            group_by=["targeting"],
+            columns=["keywordId"],
+            client=client,
+        )
+
+    error = exc_info.value
+    assert str(error) == (
+        "Sponsored Products report creation failed. "
+        "(status 400): invalid report configuration"
+    )
+    assert error.status_code == 400
+    assert error.response_text == "invalid report configuration"

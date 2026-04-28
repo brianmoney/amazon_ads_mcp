@@ -115,10 +115,17 @@ def default_worker_id(settings: Settings | None = None) -> str:
     return f"warehouse-{socket.gethostname()}"
 
 
-def report_window(settings: Settings | None = None, *, now: date | None = None) -> tuple[date, date]:
+def report_window(
+    settings: Settings | None = None,
+    *,
+    now: date | None = None,
+) -> tuple[date, date]:
     """Return the default inclusive report window for a worker cycle."""
     resolved_settings = settings or Settings()
-    window_end = now or utcnow().date()
+    current_date = now or utcnow().date()
+    window_end = current_date - timedelta(
+        days=max(resolved_settings.warehouse_report_lag_days, 0)
+    )
     window_start = window_end - timedelta(
         days=max(resolved_settings.warehouse_report_window_days - 1, 0)
     )

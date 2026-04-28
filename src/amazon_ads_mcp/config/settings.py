@@ -270,6 +270,11 @@ class Settings(BaseSettings):
         alias="WAREHOUSE_REPORT_WINDOW_DAYS",
         description="Window size used for report-based warehouse loads",
     )
+    warehouse_report_lag_days: int = Field(
+        1,
+        alias="WAREHOUSE_REPORT_LAG_DAYS",
+        description="Lag applied to default report-based warehouse windows",
+    )
     warehouse_claim_timeout_seconds: int = Field(
         1800,
         alias="WAREHOUSE_CLAIM_TIMEOUT_SECONDS",

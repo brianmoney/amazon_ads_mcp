@@ -60,6 +60,64 @@ def _parse_timeout_status(error_text: str) -> str | None:
     return None
 
 
+def _report_request_diagnostic(request: ReportRequest) -> dict[str, object]:
+    return {
+        "surface_name": request.surface_name,
+        "report_type_id": request.report_type_id,
+        "start_date": request.start_date,
+        "end_date": request.end_date,
+        "group_by": request.group_by,
+        "columns": request.columns,
+        "filters": request.filters,
+        "time_unit": request.time_unit,
+    }
+
+
+def _build_report_failure_diagnostic(
+    *,
+    phase: str,
+    profile_id: str,
+    region: str,
+    request: ReportRequest,
+    error: SPReportError,
+    amazon_report_id: str | None = None,
+) -> dict[str, object]:
+    return {
+        "status": "failed",
+        "phase": phase,
+        "surface_name": request.surface_name,
+        "profile_id": profile_id,
+        "region": region,
+        "amazon_report_id": amazon_report_id,
+        "request_window": {
+            "start_date": request.start_date,
+            "end_date": request.end_date,
+        },
+        "request": _report_request_diagnostic(request),
+        "error": {
+            "message": str(error),
+            "status_code": error.status_code,
+            "response_text": error.response_text,
+        },
+    }
+
+
+def _build_invalid_profile_region_message(
+    *, region: str, invalid_profile_ids: list[str]
+) -> str:
+    invalid = ", ".join(invalid_profile_ids)
+    return (
+        "Configured warehouse profile IDs are not visible in region "
+        f"{region}: {invalid}."
+    )
+
+
+def _report_failure_raw_status(error: SPReportError) -> str | None:
+    if error.status_code is None:
+        return None
+    return f"HTTP_{error.status_code}"
+
+
 @dataclass(frozen=True)
 class ScheduledSurface:
     """Surface metadata used to register worker schedules."""
@@ -241,14 +299,26 @@ class WarehouseWorker:
 
     async def _resolve_profiles_for_region(self, region: str) -> list[str]:
         """Return configured profile ids or discover visible profiles for a region."""
-        if self.settings.warehouse_profile_ids:
-            return self.settings.warehouse_profile_ids
         await ensure_worker_region(region)
-        return [
+        visible_profile_ids = [
             str(profile.get("profileId", "")).strip()
             for profile in await fetch_live_profiles()
             if str(profile.get("profileId", "")).strip()
         ]
+        configured_profile_ids = self.settings.effective_warehouse_profile_ids
+        if configured_profile_ids:
+            invalid_profile_ids = sorted(
+                set(configured_profile_ids) - set(visible_profile_ids)
+            )
+            if invalid_profile_ids:
+                raise RuntimeError(
+                    _build_invalid_profile_region_message(
+                        region=region,
+                        invalid_profile_ids=invalid_profile_ids,
+                    )
+                )
+            return configured_profile_ids
+        return visible_profile_ids
 
     async def _run_profile_cycle(self, *, profile_id: str, region: str) -> None:
         """Run the documented loader order for one profile and region."""
@@ -519,7 +589,37 @@ class WarehouseWorker:
                     self.settings.warehouse_report_poll_timeout_seconds,
                 )
                 return
-            job_coordinator.fail(job.ingestion_job_id, error_text=str(exc))
+            failure_diagnostic = _build_report_failure_diagnostic(
+                phase="create" if report_run and not report_run.amazon_report_id else "report_lifecycle",
+                profile_id=profile_id,
+                region=region,
+                request=request,
+                error=exc,
+                amazon_report_id=(
+                    report_run.amazon_report_id if report_run is not None else None
+                ),
+            )
+            if report_run is not None:
+                durable_reports.mark_failed(
+                    report_run.report_run_id,
+                    error_text=str(exc),
+                    raw_status=_report_failure_raw_status(exc),
+                    status_details=exc.response_text,
+                    diagnostic=failure_diagnostic,
+                )
+            logger.error(
+                "Warehouse report %s failed during %s for profile %s in region %s: %s",
+                surface_name,
+                failure_diagnostic["phase"],
+                profile_id,
+                region,
+                failure_diagnostic,
+            )
+            job_coordinator.fail(
+                job.ingestion_job_id,
+                error_text=str(exc),
+                diagnostic=failure_diagnostic,
+            )
             raise
         except Exception as exc:
             job_coordinator.fail(job.ingestion_job_id, error_text=str(exc))

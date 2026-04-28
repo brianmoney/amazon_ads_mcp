@@ -256,3 +256,176 @@ async def test_execute_report_surface_completes_when_poll_timeout_is_resumable(
     assert diagnostic["amazon_report_id"] == "rpt-1"
     assert durable.marked[-1][1]["status"] == "queued"
     assert durable.marked[-1][1]["diagnostic"]["resumable"] is True
+
+
+@pytest.mark.asyncio
+async def test_resolve_profiles_for_region_rejects_invalid_configured_profiles(
+    monkeypatch,
+):
+    seen_regions = []
+
+    async def fake_ensure_region(region):
+        seen_regions.append(region)
+
+    async def fake_fetch_live_profiles():
+        return [{"profileId": "profile-1"}, {"profileId": "profile-2"}]
+
+    monkeypatch.setattr(worker_module, "ensure_worker_region", fake_ensure_region)
+    monkeypatch.setattr(worker_module, "fetch_live_profiles", fake_fetch_live_profiles)
+
+    warehouse_worker = worker_module.WarehouseWorker(
+        settings=SimpleNamespace(
+            warehouse_worker_id="worker-1",
+            warehouse_heartbeat_seconds=60,
+            effective_warehouse_profile_ids=["profile-1", "profile-9"],
+        )
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"Configured warehouse profile IDs are not visible in region na: profile-9",
+    ):
+        await warehouse_worker._resolve_profiles_for_region("na")
+
+    assert seen_regions == ["na"]
+
+
+@pytest.mark.asyncio
+async def test_execute_report_surface_marks_create_failure_terminal(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        worker_module,
+        "report_window",
+        lambda settings: (date(2026, 1, 1), date(2026, 1, 2)),
+    )
+
+    class FakeDurableReports:
+        def __init__(self, connection):
+            self.connection = connection
+            self.failed = []
+
+        def create_or_resume(self, **kwargs):
+            return SimpleNamespace(
+                report_run_id="run-1",
+                amazon_report_id=None,
+            )
+
+        def store_amazon_report_id(self, *args, **kwargs):
+            raise AssertionError("store_amazon_report_id should not run")
+
+        def mark_polled(self, *args, **kwargs):
+            raise AssertionError("mark_polled should not run")
+
+        def mark_downloaded(self, *args, **kwargs):
+            raise AssertionError("mark_downloaded should not run")
+
+        def mark_failed(self, report_run_id, **kwargs):
+            self.failed.append((report_run_id, kwargs))
+            return SimpleNamespace(report_run_id=report_run_id)
+
+    durable = FakeDurableReports(object())
+    monkeypatch.setattr(
+        worker_module,
+        "DurableReportCoordinator",
+        lambda connection: durable,
+    )
+
+    async def fake_get_client(_auth_manager):
+        return object()
+
+    async def fake_create(*args, **kwargs):
+        raise SPReportError(
+            "Sponsored Products report creation failed. (status 400): invalid report configuration",
+            status_code=400,
+            response_text="invalid report configuration",
+        )
+
+    monkeypatch.setattr(worker_module, "create_live_report", fake_create)
+    monkeypatch.setattr(
+        "amazon_ads_mcp.tools.sp.common.require_sp_context",
+        lambda: (object(), "profile-1", "na"),
+    )
+    monkeypatch.setattr(
+        "amazon_ads_mcp.tools.sp.common.get_sp_client",
+        fake_get_client,
+    )
+
+    warehouse_worker = worker_module.WarehouseWorker(
+        settings=SimpleNamespace(
+            warehouse_worker_id="worker-1",
+            warehouse_heartbeat_seconds=60,
+            warehouse_report_poll_timeout_seconds=360.0,
+        )
+    )
+    coordinator = FakeJobCoordinator()
+
+    with pytest.raises(SPReportError, match=r"status 400"):
+        await warehouse_worker._execute_report_surface(
+            connection=object(),
+            job_coordinator=coordinator,
+            profile_id="profile-1",
+            region="na",
+            surface_name="get_keyword_performance",
+        )
+
+    assert coordinator.completed == []
+    assert len(coordinator.failed) == 1
+    job_diagnostic = coordinator.failed[0][2]
+    assert job_diagnostic == {
+        "status": "failed",
+        "phase": "create",
+        "surface_name": "get_keyword_performance",
+        "profile_id": "profile-1",
+        "region": "na",
+        "amazon_report_id": None,
+        "request_window": {
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-02",
+        },
+        "request": {
+            "surface_name": "get_keyword_performance",
+            "report_type_id": "spTargeting",
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-02",
+            "group_by": ["targeting"],
+            "columns": [
+                "campaignId",
+                "campaignName",
+                "adGroupId",
+                "adGroupName",
+                "keywordId",
+                "keyword",
+                "matchType",
+                "impressions",
+                "clicks",
+                "cost",
+                "sales14d",
+                "purchases14d",
+            ],
+            "filters": [{"field": "keywordType", "values": ["BROAD", "PHRASE", "EXACT"]}],
+            "time_unit": "SUMMARY",
+        },
+        "error": {
+            "message": (
+                "Sponsored Products report creation failed. "
+                "(status 400): invalid report configuration"
+            ),
+            "status_code": 400,
+            "response_text": "invalid report configuration",
+        },
+    }
+    assert durable.failed == [
+        (
+            "run-1",
+            {
+                "error_text": (
+                    "Sponsored Products report creation failed. "
+                    "(status 400): invalid report configuration"
+                ),
+                "raw_status": "HTTP_400",
+                "status_details": "invalid report configuration",
+                "diagnostic": job_diagnostic,
+            },
+        )
+    ]

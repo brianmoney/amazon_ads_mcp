@@ -25,6 +25,7 @@ DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 MAX_POLL_INTERVAL_SECONDS = 8.0
 DEFAULT_POLL_JITTER_SECONDS = 0.25
 POLL_BACKOFF_FACTOR = 1.5
+MAX_ERROR_DETAIL_LENGTH = 500
 
 
 class SPReportError(RuntimeError):
@@ -44,10 +45,34 @@ class SPReportError(RuntimeError):
 
 def _build_http_error(message: str, exc: httpx.HTTPError) -> SPReportError:
     response = exc.response
+    detail = None
+    if response is not None:
+        try:
+            payload = response.json()
+        except Exception:
+            payload = None
+
+        if isinstance(payload, dict):
+            detail = (
+                payload.get("message")
+                or payload.get("details")
+                or payload.get("code")
+            )
+        if not isinstance(detail, str) or not detail.strip():
+            detail = response.text
+        if isinstance(detail, str):
+            detail = " ".join(detail.split())[:MAX_ERROR_DETAIL_LENGTH]
+
+    formatted = message
+    if response is not None:
+        formatted = f"{formatted} (status {response.status_code})"
+    if detail:
+        formatted = f"{formatted}: {detail}"
+
     return SPReportError(
-        message,
+        formatted,
         status_code=response.status_code if response is not None else None,
-        response_text=(response.text if response is not None else None),
+        response_text=detail,
     )
 
 
