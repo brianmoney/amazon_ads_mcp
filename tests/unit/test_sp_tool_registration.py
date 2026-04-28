@@ -26,6 +26,12 @@ async def test_register_all_sp_tools_exposes_read_tool_names():
         "get_keyword_performance",
         "get_placement_report",
         "get_search_term_report",
+        "warehouse_get_campaign_budget_history",
+        "warehouse_get_impression_share_report",
+        "warehouse_get_keyword_performance",
+        "warehouse_get_placement_report",
+        "warehouse_get_search_term_report",
+        "warehouse_get_surface_status",
         "sp_report_status",
         "adjust_keyword_bids",
         "add_keywords",
@@ -33,6 +39,8 @@ async def test_register_all_sp_tools_exposes_read_tool_names():
         "pause_keywords",
         "update_campaign_budget",
     }.issubset(tool_names)
+    assert "warehouse_list_campaigns" not in tool_names
+    assert "warehouse_list_portfolios" not in tool_names
 
 
 @pytest.mark.asyncio
@@ -158,6 +166,52 @@ async def test_register_all_sp_tools_publishes_placement_resume_input():
 
 
 @pytest.mark.asyncio
+async def test_register_all_sp_tools_publishes_warehouse_read_controls():
+    server = FastMCP("test")
+
+    await register_all_sp_tools(server)
+
+    keyword_tool = await server.get_tool("warehouse_get_keyword_performance")
+    status_tool = await server.get_tool("warehouse_get_surface_status")
+
+    _assert_contains(
+        keyword_tool.description,
+        "data_source",
+        "freshness",
+        "fallback_reason",
+    )
+    _assert_contains(
+        keyword_tool.parameters["properties"]["read_preference"]["description"],
+        "prefer_warehouse",
+        "warehouse_only",
+        "live_only",
+    )
+    _assert_contains(
+        keyword_tool.parameters["properties"]["max_staleness_minutes"][
+            "description"
+        ],
+        "maximum allowed warehouse age in minutes",
+    )
+    _assert_contains(
+        status_tool.parameters["properties"]["surface_name"]["description"],
+        "get_keyword_performance",
+        "get_portfolio_budget_usage",
+    )
+    _assert_contains(
+        status_tool.parameters["properties"]["read_preference"]["description"],
+        "prefer_warehouse",
+        "warehouse_only",
+        "live_only",
+    )
+    _assert_contains(
+        status_tool.parameters["properties"]["max_staleness_minutes"][
+            "description"
+        ],
+        "maximum allowed warehouse age in minutes",
+    )
+
+
+@pytest.mark.asyncio
 async def test_register_all_sp_tools_publishes_nested_write_metadata():
     server = FastMCP("test")
 
@@ -258,6 +312,14 @@ async def test_server_builder_includes_sp_read_tools(builder):
     assert "get_keyword_performance" in tool_names
     assert "get_placement_report" in tool_names
     assert "get_search_term_report" in tool_names
+    assert "warehouse_get_campaign_budget_history" in tool_names
+    assert "warehouse_get_impression_share_report" in tool_names
+    assert "warehouse_get_keyword_performance" in tool_names
+    assert "warehouse_get_placement_report" in tool_names
+    assert "warehouse_get_search_term_report" in tool_names
+    assert "warehouse_get_surface_status" in tool_names
+    assert "warehouse_list_campaigns" not in tool_names
+    assert "warehouse_list_portfolios" not in tool_names
     assert "sp_report_status" in tool_names
     assert "adjust_keyword_bids" in tool_names
     assert "add_keywords" in tool_names
@@ -323,6 +385,44 @@ async def test_server_builder_publishes_placement_resume_input(builder):
         placement_tool.parameters["properties"]["timeout_seconds"]["description"],
         "Server-side polling timeout for this call only.",
         "resume_from_report_id",
+    )
+
+
+@pytest.mark.asyncio
+async def test_server_builder_publishes_warehouse_tool_metadata(builder):
+    server = await builder.build()
+
+    keyword_tool = await server.get_tool("warehouse_get_keyword_performance")
+    status_tool = await server.get_tool("warehouse_get_surface_status")
+
+    _assert_contains(
+        keyword_tool.parameters["properties"]["read_preference"]["description"],
+        "prefer_warehouse",
+        "warehouse_only",
+        "live_only",
+    )
+    _assert_contains(
+        keyword_tool.parameters["properties"]["max_staleness_minutes"][
+            "description"
+        ],
+        "maximum allowed warehouse age in minutes",
+    )
+    _assert_contains(
+        status_tool.parameters["properties"]["surface_name"]["description"],
+        "get_keyword_performance",
+        "get_portfolio_budget_usage",
+    )
+    _assert_contains(
+        status_tool.parameters["properties"]["read_preference"]["description"],
+        "prefer_warehouse",
+        "warehouse_only",
+        "live_only",
+    )
+    _assert_contains(
+        status_tool.parameters["properties"]["max_staleness_minutes"][
+            "description"
+        ],
+        "maximum allowed warehouse age in minutes",
     )
 
 

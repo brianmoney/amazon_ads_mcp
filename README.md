@@ -37,10 +37,16 @@ The server does not expose the legacy OpenAPI-generated tool catalog, download/e
 
 - `list_campaigns` — List Sponsored Products campaigns with nested ad-group and nullable portfolio context. `campaign_states` accepts `ENABLED`, `PAUSED`, or `ARCHIVED`, normalizes values to uppercase, and leaves the listing unfiltered by state when omitted.
 - `get_campaign_budget_history` — Run or resume an async Sponsored Products budget history report and return daily budget pacing and utilization context. `timeout_seconds` bounds server-side polling for the current call; preserve the returned `report_id` and continue with `resume_from_report_id` instead of creating a duplicate report.
+- `warehouse_get_campaign_budget_history` — Read Sponsored Products budget history from the warehouse when cached data is fresh enough for the requested window, or fall back to `get_campaign_budget_history` when warehouse data is missing, too stale, or cannot prove coverage. Adds `provenance` with `data_source`, freshness details, and structured `fallback_reason`, plus shared `read_preference` and `max_staleness_minutes` controls.
 - `get_impression_share_report` — Run or resume an async Sponsored Products top-of-search impression share report with explicit availability diagnostics. `timeout_seconds` bounds server-side polling for the current call; preserve the returned `report_id` and continue with `resume_from_report_id` instead of creating a duplicate report.
+- `warehouse_get_impression_share_report` — Read Sponsored Products top-of-search impression share from the warehouse when cached data is fresh enough for the requested window, or fall back to `get_impression_share_report` when warehouse data is missing, too stale, or cannot prove coverage. Adds `provenance` with `data_source`, freshness details, and structured `fallback_reason`, plus shared `read_preference` and `max_staleness_minutes` controls.
 - `get_keyword_performance` — Run or resume an async Sponsored Products keyword report with derived metrics such as ACOS, ROAS, CPC, and CTR. The current tool returns manual keyword rows only, so auto-targeting campaigns can legitimately return zero rows. `timeout_seconds` bounds server-side polling for the current call; preserve the returned `report_id` and continue with `resume_from_report_id` instead of creating a duplicate report.
+- `warehouse_get_keyword_performance` — Read Sponsored Products keyword performance from the warehouse when cached data is fresh enough for the requested window, or fall back to `get_keyword_performance` when warehouse data is missing, too stale, or cannot prove coverage. Adds `provenance` with `data_source`, freshness details, and structured `fallback_reason`, plus shared `read_preference` and `max_staleness_minutes` controls.
 - `get_placement_report` — Run or resume an async Sponsored Products placement report with current placement multipliers. `timeout_seconds` bounds server-side polling for the current call; preserve the returned `report_id` and continue with `resume_from_report_id` instead of creating a duplicate report.
+- `warehouse_get_placement_report` — Read Sponsored Products placement performance from the warehouse when cached data is fresh enough for the requested window, or fall back to `get_placement_report` when warehouse data is missing, too stale, or cannot prove coverage. Adds `provenance` with `data_source`, freshness details, and structured `fallback_reason`, plus shared `read_preference` and `max_staleness_minutes` controls.
 - `get_search_term_report` — Run or resume an async Sponsored Products search-term report with manual-keyword and negative-keyword context. `timeout_seconds` bounds server-side polling for the current call; preserve the returned `report_id` and continue with `resume_from_report_id` instead of creating a duplicate report.
+- `warehouse_get_search_term_report` — Read Sponsored Products search-term performance from the warehouse when cached data is fresh enough for the requested window, or fall back to `get_search_term_report` when warehouse data is missing, too stale, or cannot prove coverage. Adds `provenance` with `data_source`, freshness details, and structured `fallback_reason`, plus shared `read_preference` and `max_staleness_minutes` controls.
+- `warehouse_get_surface_status` — Return the latest warehouse freshness watermark and last known status for the supported cached-read surfaces in the active profile and region.
 - `sp_report_status` — Check the lifecycle state of a previously created Sponsored Products async report by report ID.
 - `adjust_keyword_bids` — Apply batch Sponsored Products keyword bid changes and return audit details. `adjustments` is a required non-empty list of `{ keyword_id, new_bid, reason? }`, the current bid bounds are `0.02` to `100.00`, and `previous_bid` or `prior_bid` reflects the live preflight bid observed at write time.
 - `add_keywords` — Create Sponsored Products keywords while detecting duplicates. Required inputs are `campaign_id`, `ad_group_id`, and keyword items shaped like `{ keyword_text, bid, match_type? }`, with supported match types `EXACT`, `PHRASE`, and `BROAD` and bid bounds `0.02` to `100.00`.
@@ -52,6 +58,7 @@ The server does not expose the legacy OpenAPI-generated tool catalog, download/e
 
 - `list_portfolios` — List portfolios with normalized budget settings for the active profile and region.
 - `get_portfolio_budget_usage` — Return current spend-versus-cap usage for requested portfolios with explicit availability diagnostics.
+- `warehouse_get_portfolio_budget_usage` — Read portfolio spend-versus-cap usage from the warehouse when cached data is fresh enough, or fall back to `get_portfolio_budget_usage` when warehouse data is missing, too stale, or cannot prove coverage for the requested portfolio IDs. Adds `provenance` with `data_source`, freshness details, and structured `fallback_reason`, plus shared `read_preference` and `max_staleness_minutes` controls.
 - `update_portfolio_budget` — Update a portfolio daily or monthly budget and return applied, skipped, or failed audit details. Use `budget_scope=daily` for an always-on cap, or `budget_scope=monthly` with both `start_date` and `end_date` for a date-range budget.
 
 ### Sponsored Display Tools
@@ -314,6 +321,28 @@ data in this order, and can optionally run warehouse-versus-live validation:
 Validation compares warehouse rows to the current live MCP outputs for the same
 profile, region, and report window or portfolio scope without changing the live
 tool contracts.
+
+## Warehouse Read Tools
+
+The warehouse-prefixed tools are an explicit cached-read surface. They do not
+change the existing live tool names or semantics.
+
+- Supported surfaces: `warehouse_get_surface_status`,
+  `warehouse_get_keyword_performance`, `warehouse_get_search_term_report`,
+  `warehouse_get_campaign_budget_history`, `warehouse_get_placement_report`,
+  `warehouse_get_impression_share_report`, and
+  `warehouse_get_portfolio_budget_usage`.
+- Unsupported for this rollout: `warehouse_list_campaigns` and
+  `warehouse_list_portfolios` are intentionally not published.
+- Shared caller controls:
+  `read_preference=prefer_warehouse|warehouse_only|live_only` and optional
+  `max_staleness_minutes`.
+- Shared provenance contract: every warehouse-prefixed response adds
+  `provenance.data_source`, `provenance.freshness`, and `provenance.fallback_reason`.
+- Warehouse-first routing is conservative. The server falls back to the live
+  tool when warehouse freshness records are missing, cached data exceeds the
+  caller's tolerated staleness, or the warehouse cannot prove coverage for the
+  requested scope.
 
 Required validation flow before committing:
 

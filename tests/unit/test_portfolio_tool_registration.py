@@ -22,6 +22,7 @@ async def test_register_all_portfolio_tools_exposes_tool_names():
     assert {
         "list_portfolios",
         "get_portfolio_budget_usage",
+        "warehouse_get_portfolio_budget_usage",
         "update_portfolio_budget",
     }.issubset(tool_names)
 
@@ -75,6 +76,32 @@ async def test_register_all_portfolio_tools_publishes_state_filter_guidance():
     )
 
 
+@pytest.mark.asyncio
+async def test_register_all_portfolio_tools_publishes_warehouse_controls():
+    server = FastMCP("test")
+
+    await register_all_portfolio_tools(server)
+
+    tool = await server.get_tool("warehouse_get_portfolio_budget_usage")
+
+    _assert_contains(
+        tool.description,
+        "data_source",
+        "freshness",
+        "fallback_reason",
+    )
+    _assert_contains(
+        tool.parameters["properties"]["read_preference"]["description"],
+        "prefer_warehouse",
+        "warehouse_only",
+        "live_only",
+    )
+    _assert_contains(
+        tool.parameters["properties"]["max_staleness_minutes"]["description"],
+        "maximum allowed warehouse age in minutes",
+    )
+
+
 @pytest.fixture
 def builder(monkeypatch):
     fake_auth_manager = SimpleNamespace(provider=None)
@@ -100,6 +127,7 @@ async def test_server_builder_includes_portfolio_tools(builder):
     tool_names = {tool.name for tool in await server.list_tools()}
     assert "list_portfolios" in tool_names
     assert "get_portfolio_budget_usage" in tool_names
+    assert "warehouse_get_portfolio_budget_usage" in tool_names
     assert "update_portfolio_budget" in tool_names
 
 
@@ -118,4 +146,22 @@ async def test_server_builder_publishes_portfolio_metadata(builder):
         tool.parameters["properties"]["budget_scope"]["description"],
         "daily or monthly",
         "monthly requires both start_date and end_date",
+    )
+
+
+@pytest.mark.asyncio
+async def test_server_builder_publishes_warehouse_portfolio_metadata(builder):
+    server = await builder.build()
+
+    tool = await server.get_tool("warehouse_get_portfolio_budget_usage")
+
+    _assert_contains(
+        tool.parameters["properties"]["read_preference"]["description"],
+        "prefer_warehouse",
+        "warehouse_only",
+        "live_only",
+    )
+    _assert_contains(
+        tool.parameters["properties"]["max_staleness_minutes"]["description"],
+        "maximum allowed warehouse age in minutes",
     )

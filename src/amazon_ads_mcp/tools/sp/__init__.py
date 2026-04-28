@@ -36,6 +36,24 @@ _REPORT_RESUME_TEXT = (
     "Known report_id to resume instead of creating a new report. Use the "
     "report_id returned by an earlier timeout or in-progress response."
 )
+_WAREHOUSE_READ_PREFERENCE_TEXT = (
+    "Optional warehouse routing mode. prefer_warehouse checks cached warehouse "
+    "data first and falls back to live when needed, warehouse_only refuses live "
+    "fallback, and live_only bypasses warehouse lookup while keeping warehouse "
+    "provenance metadata in the response."
+)
+_WAREHOUSE_STALENESS_TEXT = (
+    "Optional maximum allowed warehouse age in minutes. When omitted, the "
+    "warehouse freshness watermark is reported but not bounded by the caller."
+)
+_WAREHOUSE_STATUS_SURFACE_TEXT = (
+    "Optional warehouse-backed surface name. Supported values: "
+    "get_campaign_budget_history, get_impression_share_report, "
+    "get_keyword_performance, get_placement_report, "
+    "get_portfolio_budget_usage, and get_search_term_report. Omit it to "
+    "return status for every supported warehouse surface in the active "
+    "profile and region."
+)
 _ADJUSTMENT_ITEM_SCHEMA = {
     "type": "object",
     "properties": {
@@ -87,6 +105,15 @@ _KEYWORD_CREATE_ITEM_SCHEMA = {
 
 async def register_all_sp_tools(server: FastMCP) -> None:
     """Register the current Sponsored Products tool surface."""
+
+    from ...warehouse.read_tools import (
+        warehouse_get_campaign_budget_history,
+        warehouse_get_impression_share_report,
+        warehouse_get_keyword_performance,
+        warehouse_get_placement_report,
+        warehouse_get_search_term_report,
+        warehouse_get_surface_status,
+    )
 
     @server.tool(
         name="list_campaigns",
@@ -175,6 +202,58 @@ async def register_all_sp_tools(server: FastMCP) -> None:
         )
 
     @server.tool(
+        name="warehouse_get_campaign_budget_history",
+        description=(
+            "Read Sponsored Products budget history from the warehouse when "
+            "fresh enough, otherwise fall back to the live report tool. The "
+            "response keeps the budget-history payload shape and adds "
+            "provenance with data_source, freshness, and fallback_reason."
+        ),
+    )
+    async def warehouse_get_campaign_budget_history_tool(
+        ctx: Context,
+        start_date: str,
+        end_date: str,
+        campaign_ids: Annotated[
+            Optional[list[str]],
+            Field(
+                default=None,
+                description="Optional list of campaign IDs to include in the report.",
+            ),
+        ] = None,
+        limit: Annotated[
+            int,
+            Field(description="Maximum number of normalized budget-history rows to return."),
+        ] = 100,
+        resume_from_report_id: Annotated[
+            Optional[str],
+            Field(default=None, description=_REPORT_RESUME_TEXT),
+        ] = None,
+        timeout_seconds: Annotated[
+            float,
+            Field(description=_REPORT_TIMEOUT_TEXT),
+        ] = 120.0,
+        read_preference: Annotated[
+            str,
+            Field(description=_WAREHOUSE_READ_PREFERENCE_TEXT),
+        ] = "prefer_warehouse",
+        max_staleness_minutes: Annotated[
+            Optional[int],
+            Field(default=None, description=_WAREHOUSE_STALENESS_TEXT),
+        ] = None,
+    ) -> dict:
+        return await warehouse_get_campaign_budget_history(
+            start_date=start_date,
+            end_date=end_date,
+            campaign_ids=campaign_ids,
+            limit=limit,
+            resume_from_report_id=resume_from_report_id,
+            timeout_seconds=timeout_seconds,
+            read_preference=read_preference,
+            max_staleness_minutes=max_staleness_minutes,
+        )
+
+    @server.tool(
         name="get_impression_share_report",
         description=(
             "Run or resume the Sponsored Products top-of-search impression "
@@ -241,6 +320,82 @@ async def register_all_sp_tools(server: FastMCP) -> None:
         )
 
     @server.tool(
+        name="warehouse_get_impression_share_report",
+        description=(
+            "Read Sponsored Products impression share from the warehouse when "
+            "fresh enough, otherwise fall back to the live report tool. The "
+            "response preserves availability diagnostics and adds provenance "
+            "with data_source, freshness, and fallback_reason."
+        ),
+    )
+    async def warehouse_get_impression_share_report_tool(
+        ctx: Context,
+        start_date: str,
+        end_date: str,
+        campaign_ids: Annotated[
+            Optional[list[str]],
+            Field(
+                default=None,
+                description="Optional campaign IDs to scope the campaign-level report.",
+            ),
+        ] = None,
+        ad_group_ids: Annotated[
+            Optional[list[str]],
+            Field(
+                default=None,
+                description=(
+                    "Optional ad group IDs. The warehouse and live impression-share "
+                    "tools are campaign-level only, so supplying ad_group_ids "
+                    "returns an explicit unsupported result."
+                ),
+            ),
+        ] = None,
+        keyword_ids: Annotated[
+            Optional[list[str]],
+            Field(
+                default=None,
+                description=(
+                    "Optional keyword IDs. The warehouse and live impression-share "
+                    "tools are campaign-level only, so supplying keyword_ids "
+                    "returns an explicit unsupported result."
+                ),
+            ),
+        ] = None,
+        limit: Annotated[
+            int,
+            Field(description="Maximum number of normalized impression-share rows to return."),
+        ] = 100,
+        resume_from_report_id: Annotated[
+            Optional[str],
+            Field(default=None, description=_REPORT_RESUME_TEXT),
+        ] = None,
+        timeout_seconds: Annotated[
+            float,
+            Field(description=_REPORT_TIMEOUT_TEXT),
+        ] = 120.0,
+        read_preference: Annotated[
+            str,
+            Field(description=_WAREHOUSE_READ_PREFERENCE_TEXT),
+        ] = "prefer_warehouse",
+        max_staleness_minutes: Annotated[
+            Optional[int],
+            Field(default=None, description=_WAREHOUSE_STALENESS_TEXT),
+        ] = None,
+    ) -> dict:
+        return await warehouse_get_impression_share_report(
+            start_date=start_date,
+            end_date=end_date,
+            campaign_ids=campaign_ids,
+            ad_group_ids=ad_group_ids,
+            keyword_ids=keyword_ids,
+            limit=limit,
+            resume_from_report_id=resume_from_report_id,
+            timeout_seconds=timeout_seconds,
+            read_preference=read_preference,
+            max_staleness_minutes=max_staleness_minutes,
+        )
+
+    @server.tool(
         name="get_keyword_performance",
         description=(
             "Run or resume the Sponsored Products keyword report with derived "
@@ -291,6 +446,65 @@ async def register_all_sp_tools(server: FastMCP) -> None:
         )
 
     @server.tool(
+        name="warehouse_get_keyword_performance",
+        description=(
+            "Read Sponsored Products keyword performance from the warehouse when "
+            "fresh enough, otherwise fall back to the live report tool. The "
+            "response keeps the keyword payload shape and adds provenance with "
+            "data_source, freshness, and fallback_reason."
+        ),
+    )
+    async def warehouse_get_keyword_performance_tool(
+        ctx: Context,
+        start_date: str,
+        end_date: str,
+        campaign_ids: Annotated[
+            Optional[list[str]],
+            Field(default=None, description="Optional campaign IDs to include."),
+        ] = None,
+        ad_group_ids: Annotated[
+            Optional[list[str]],
+            Field(default=None, description="Optional ad group IDs to include."),
+        ] = None,
+        keyword_ids: Annotated[
+            Optional[list[str]],
+            Field(default=None, description="Optional keyword IDs to include."),
+        ] = None,
+        limit: Annotated[
+            int,
+            Field(description="Maximum number of normalized keyword rows to return."),
+        ] = 100,
+        resume_from_report_id: Annotated[
+            Optional[str],
+            Field(default=None, description=_REPORT_RESUME_TEXT),
+        ] = None,
+        timeout_seconds: Annotated[
+            float,
+            Field(description=_REPORT_TIMEOUT_TEXT),
+        ] = 360.0,
+        read_preference: Annotated[
+            str,
+            Field(description=_WAREHOUSE_READ_PREFERENCE_TEXT),
+        ] = "prefer_warehouse",
+        max_staleness_minutes: Annotated[
+            Optional[int],
+            Field(default=None, description=_WAREHOUSE_STALENESS_TEXT),
+        ] = None,
+    ) -> dict:
+        return await warehouse_get_keyword_performance(
+            start_date=start_date,
+            end_date=end_date,
+            campaign_ids=campaign_ids,
+            ad_group_ids=ad_group_ids,
+            keyword_ids=keyword_ids,
+            limit=limit,
+            resume_from_report_id=resume_from_report_id,
+            timeout_seconds=timeout_seconds,
+            read_preference=read_preference,
+            max_staleness_minutes=max_staleness_minutes,
+        )
+
+    @server.tool(
         name="get_placement_report",
         description=(
             "Run or resume the Sponsored Products placement report with current "
@@ -329,6 +543,55 @@ async def register_all_sp_tools(server: FastMCP) -> None:
         )
 
     @server.tool(
+        name="warehouse_get_placement_report",
+        description=(
+            "Read Sponsored Products placement performance from the warehouse "
+            "when fresh enough, otherwise fall back to the live report tool. "
+            "The response keeps the placement payload shape and adds provenance "
+            "with data_source, freshness, and fallback_reason."
+        ),
+    )
+    async def warehouse_get_placement_report_tool(
+        ctx: Context,
+        start_date: str,
+        end_date: str,
+        campaign_ids: Annotated[
+            Optional[list[str]],
+            Field(default=None, description="Optional campaign IDs to include."),
+        ] = None,
+        limit: Annotated[
+            int,
+            Field(description="Maximum number of normalized placement rows to return."),
+        ] = 100,
+        resume_from_report_id: Annotated[
+            Optional[str],
+            Field(default=None, description=_REPORT_RESUME_TEXT),
+        ] = None,
+        timeout_seconds: Annotated[
+            float,
+            Field(description=_REPORT_TIMEOUT_TEXT),
+        ] = 120.0,
+        read_preference: Annotated[
+            str,
+            Field(description=_WAREHOUSE_READ_PREFERENCE_TEXT),
+        ] = "prefer_warehouse",
+        max_staleness_minutes: Annotated[
+            Optional[int],
+            Field(default=None, description=_WAREHOUSE_STALENESS_TEXT),
+        ] = None,
+    ) -> dict:
+        return await warehouse_get_placement_report(
+            start_date=start_date,
+            end_date=end_date,
+            campaign_ids=campaign_ids,
+            limit=limit,
+            resume_from_report_id=resume_from_report_id,
+            timeout_seconds=timeout_seconds,
+            read_preference=read_preference,
+            max_staleness_minutes=max_staleness_minutes,
+        )
+
+    @server.tool(
         name="get_search_term_report",
         description=(
             "Run or resume the Sponsored Products search-term report with manual "
@@ -364,6 +627,83 @@ async def register_all_sp_tools(server: FastMCP) -> None:
             limit=limit,
             resume_from_report_id=resume_from_report_id,
             timeout_seconds=timeout_seconds,
+        )
+
+    @server.tool(
+        name="warehouse_get_search_term_report",
+        description=(
+            "Read Sponsored Products search-term performance from the warehouse "
+            "when fresh enough, otherwise fall back to the live report tool. "
+            "The response keeps the search-term payload shape and adds "
+            "provenance with data_source, freshness, and fallback_reason."
+        ),
+    )
+    async def warehouse_get_search_term_report_tool(
+        ctx: Context,
+        start_date: str,
+        end_date: str,
+        campaign_ids: Annotated[
+            Optional[list[str]],
+            Field(default=None, description="Optional campaign IDs to include."),
+        ] = None,
+        limit: Annotated[
+            int,
+            Field(description="Maximum number of normalized search-term rows to return."),
+        ] = 100,
+        resume_from_report_id: Annotated[
+            Optional[str],
+            Field(default=None, description=_REPORT_RESUME_TEXT),
+        ] = None,
+        timeout_seconds: Annotated[
+            float,
+            Field(description=_REPORT_TIMEOUT_TEXT),
+        ] = 120.0,
+        read_preference: Annotated[
+            str,
+            Field(description=_WAREHOUSE_READ_PREFERENCE_TEXT),
+        ] = "prefer_warehouse",
+        max_staleness_minutes: Annotated[
+            Optional[int],
+            Field(default=None, description=_WAREHOUSE_STALENESS_TEXT),
+        ] = None,
+    ) -> dict:
+        return await warehouse_get_search_term_report(
+            start_date=start_date,
+            end_date=end_date,
+            campaign_ids=campaign_ids,
+            limit=limit,
+            resume_from_report_id=resume_from_report_id,
+            timeout_seconds=timeout_seconds,
+            read_preference=read_preference,
+            max_staleness_minutes=max_staleness_minutes,
+        )
+
+    @server.tool(
+        name="warehouse_get_surface_status",
+        description=(
+            "Inspect the latest warehouse freshness watermark and status for the "
+            "supported cached-read surfaces in the active profile and region."
+        ),
+    )
+    async def warehouse_get_surface_status_tool(
+        ctx: Context,
+        surface_name: Annotated[
+            Optional[str],
+            Field(default=None, description=_WAREHOUSE_STATUS_SURFACE_TEXT),
+        ] = None,
+        read_preference: Annotated[
+            str,
+            Field(description=_WAREHOUSE_READ_PREFERENCE_TEXT),
+        ] = "prefer_warehouse",
+        max_staleness_minutes: Annotated[
+            Optional[int],
+            Field(default=None, description=_WAREHOUSE_STALENESS_TEXT),
+        ] = None,
+    ) -> dict:
+        return await warehouse_get_surface_status(
+            surface_name=surface_name,
+            read_preference=read_preference,
+            max_staleness_minutes=max_staleness_minutes,
         )
 
     @server.tool(

@@ -12,8 +12,22 @@ from .list_portfolios import list_portfolios
 from .update_portfolio_budget import update_portfolio_budget
 
 
+_WAREHOUSE_READ_PREFERENCE_TEXT = (
+    "Optional warehouse routing mode. prefer_warehouse checks cached warehouse "
+    "data first and falls back to live when needed, warehouse_only refuses live "
+    "fallback, and live_only bypasses warehouse lookup while keeping warehouse "
+    "provenance metadata in the response."
+)
+_WAREHOUSE_STALENESS_TEXT = (
+    "Optional maximum allowed warehouse age in minutes. When omitted, the "
+    "warehouse freshness watermark is reported but not bounded by the caller."
+)
+
+
 async def register_all_portfolio_tools(server: FastMCP) -> None:
     """Register the current portfolio tool surface."""
+
+    from ...warehouse.read_tools import warehouse_get_portfolio_budget_usage
 
     @server.tool(
         name="list_portfolios",
@@ -67,6 +81,36 @@ async def register_all_portfolio_tools(server: FastMCP) -> None:
         ],
     ) -> dict:
         return await get_portfolio_budget_usage(portfolio_ids=portfolio_ids)
+
+    @server.tool(
+        name="warehouse_get_portfolio_budget_usage",
+        description=(
+            "Read portfolio spend-versus-cap usage from the warehouse when fresh "
+            "enough, otherwise fall back to the live tool. The response keeps "
+            "the portfolio budget-usage payload shape and adds provenance with "
+            "data_source, freshness, and fallback_reason."
+        ),
+    )
+    async def warehouse_get_portfolio_budget_usage_tool(
+        ctx: Context,
+        portfolio_ids: Annotated[
+            list[str],
+            Field(description="Required non-empty list of portfolio IDs to inspect."),
+        ],
+        read_preference: Annotated[
+            str,
+            Field(description=_WAREHOUSE_READ_PREFERENCE_TEXT),
+        ] = "prefer_warehouse",
+        max_staleness_minutes: Annotated[
+            Optional[int],
+            Field(default=None, description=_WAREHOUSE_STALENESS_TEXT),
+        ] = None,
+    ) -> dict:
+        return await warehouse_get_portfolio_budget_usage(
+            portfolio_ids=portfolio_ids,
+            read_preference=read_preference,
+            max_staleness_minutes=max_staleness_minutes,
+        )
 
     @server.tool(
         name="update_portfolio_budget",
