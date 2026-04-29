@@ -270,6 +270,13 @@ WAREHOUSE_CLAIM_TIMEOUT_SECONDS=1800
 WAREHOUSE_REPORT_POLL_TIMEOUT_SECONDS=360
 ```
 
+For a deterministic live verification rehearsal, use a single profile, a
+single region, `WAREHOUSE_SCHEDULER_ENABLED=false`, and the worker
+`--run-once` entrypoint. That keeps the persisted evidence bounded to one
+reviewable cycle instead of mixing it with recurring scheduler activity. See
+`WAREHOUSE_LIVE_VERIFICATION.md` for the operator runbook, warehouse evidence
+checklist, negative-path rehearsal, and the known limits of sampled validation.
+
 Start the worker after the Postgres DSN is configured:
 
 ```bash
@@ -304,6 +311,9 @@ Run one cycle without APScheduler:
 ```bash
 uv run python -m amazon_ads_mcp.warehouse.worker_entrypoint --run-once
 ```
+
+This is the recommended entrypoint for the first live warehouse verification
+pass because it produces a deterministic result set for one profile and region.
 
 The worker applies Alembic migrations on startup by default, loads warehouse
 data in this order, and can optionally run warehouse-versus-live validation:
