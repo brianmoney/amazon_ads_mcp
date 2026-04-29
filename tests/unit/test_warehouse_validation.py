@@ -3,11 +3,17 @@ from datetime import UTC, date, datetime
 import pytest
 from sqlalchemy import create_engine
 
-from amazon_ads_mcp.warehouse.schema import metadata, sp_campaign_budget_history_fact, sp_placement_fact
+from amazon_ads_mcp.warehouse.schema import (
+    metadata,
+    sp_campaign_budget_history_fact,
+    sp_placement_fact,
+    sp_search_term_fact,
+)
 from amazon_ads_mcp.warehouse.validation import (
     _compare_rows,
     validate_budget_history,
     validate_placement_report,
+    validate_search_terms,
 )
 
 
@@ -152,6 +158,80 @@ async def test_validate_placement_report_projects_warehouse_rows(connection, mon
     )
 
     result = await validate_placement_report(
+        connection,
+        profile_id="profile-1",
+        start_date="2026-01-01",
+        end_date="2026-01-02",
+    )
+
+    assert result["matched"] is True
+
+
+@pytest.mark.asyncio
+async def test_validate_search_terms_projects_aggregated_keyword_ids(
+    connection, monkeypatch
+):
+    async def fake_search_terms(*, start_date, end_date, limit):
+        assert start_date == "2026-01-01"
+        assert end_date == "2026-01-02"
+        assert limit == 100
+        return {
+            "rows": [
+                {
+                    "campaign_id": "10",
+                    "ad_group_id": "20",
+                    "keyword_id": "",
+                    "keyword_ids": ["111", "222"],
+                    "search_term": "Running Shoes",
+                    "match_type": None,
+                    "impressions": 15.0,
+                    "clicks": 3.0,
+                    "spend": 5.0,
+                    "sales": 7.0,
+                    "orders": 5.0,
+                    "manually_targeted": True,
+                    "manual_target_ids": ["a", "b"],
+                    "negated": True,
+                    "negative_target_ids": ["c"],
+                    "negative_match_types": ["NEGATIVE_PHRASE"],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        "amazon_ads_mcp.warehouse.validation.get_search_term_report",
+        fake_search_terms,
+    )
+    connection.execute(
+        sp_search_term_fact.insert().values(
+            profile_id="profile-1",
+            window_start=date(2026, 1, 1),
+            window_end=date(2026, 1, 2),
+            campaign_id="10",
+            ad_group_id="20",
+            normalized_search_term="running shoes",
+            keyword_id=None,
+            search_term="Running Shoes",
+            match_type=None,
+            impressions=15,
+            clicks=3,
+            spend=5,
+            sales_14d=7,
+            orders_14d=5,
+            manually_targeted=True,
+            negated=True,
+            targeting_context_json={
+                "keyword_ids": ["222", "111"],
+                "manual_target_ids": ["b", "a"],
+                "negative_target_ids": ["c"],
+                "negative_match_types": ["NEGATIVE_PHRASE"],
+            },
+            last_report_run_id="run-1",
+            retrieved_at=datetime.now(UTC),
+        )
+    )
+
+    result = await validate_search_terms(
         connection,
         profile_id="profile-1",
         start_date="2026-01-01",

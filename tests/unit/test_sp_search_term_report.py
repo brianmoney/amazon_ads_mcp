@@ -22,8 +22,8 @@ class FakeClient:
     def __init__(self):
         self.calls = []
 
-    async def post(self, path, json=None):
-        self.calls.append((path, json))
+    async def post(self, path, json=None, headers=None):
+        self.calls.append((path, json, headers))
         if path == "/sp/targets/list":
             return FakeResponse(
                 {"targets": [{"targetId": 1, "keywordText": "running shoes"}]}
@@ -89,6 +89,92 @@ async def test_get_search_term_report_adds_targeting_annotations(monkeypatch):
     assert second["manually_targeted"] is False
     assert second["negated"] is True
     assert second["negative_match_types"] == ["NEGATIVE_PHRASE"]
+    assert fake_client.calls == [
+        (
+            "/sp/targets/list",
+            {"count": 100, "campaignIdFilter": {"include": ["10"]}},
+            {
+                "Content-Type": "application/vnd.sptargetingClause.v3+json",
+                "Accept": "application/vnd.sptargetingClause.v3+json",
+            },
+        ),
+        (
+            "/sp/negativeTargets/list",
+            {"count": 100, "campaignIdFilter": {"include": ["10"]}},
+            {
+                "Content-Type": "application/vnd.spnegativeTargetingClause.v3+json",
+                "Accept": "application/vnd.spnegativeTargetingClause.v3+json",
+            },
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_search_term_report_merges_duplicate_normalized_terms(monkeypatch):
+    fake_client = FakeClient()
+    manager = SimpleNamespace()
+
+    monkeypatch.setattr(
+        search_term_module, "require_sp_context", lambda: (manager, "profile-1", "na")
+    )
+    monkeypatch.setattr(
+        search_term_module, "get_sp_client", AsyncMock(return_value=fake_client)
+    )
+    monkeypatch.setattr(
+        search_term_module,
+        "run_sp_report",
+        AsyncMock(
+            return_value={
+                "report_id": "rpt-merged",
+                "rows": [
+                    {
+                        "campaignId": 10,
+                        "adGroupId": 20,
+                        "keywordId": 111,
+                        "searchTerm": "Running Shoes",
+                        "matchType": "BROAD",
+                        "impressions": 10,
+                        "clicks": 1,
+                        "cost": 2,
+                        "sales14d": 3,
+                        "purchases14d": 4,
+                    },
+                    {
+                        "campaignId": 10,
+                        "adGroupId": 20,
+                        "keywordId": 222,
+                        "searchTerm": " running   shoes ",
+                        "matchType": "PHRASE",
+                        "impressions": 5,
+                        "clicks": 2,
+                        "cost": 3,
+                        "sales14d": 4,
+                        "purchases14d": 1,
+                    },
+                ],
+            }
+        ),
+    )
+
+    result = await search_term_module.get_search_term_report(
+        start_date="2026-01-01",
+        end_date="2026-01-31",
+    )
+
+    assert result["returned_count"] == 1
+    assert len(result["rows"]) == 1
+    row = result["rows"][0]
+    assert row["campaign_id"] == "10"
+    assert row["ad_group_id"] == "20"
+    assert row["keyword_id"] == ""
+    assert row["keyword_ids"] == ["111", "222"]
+    assert row["search_term"] == "Running Shoes"
+    assert row["match_type"] is None
+    assert row["impressions"] == 15
+    assert row["clicks"] == 3
+    assert row["spend"] == 5
+    assert row["sales"] == 7
+    assert row["orders"] == 5
 
 
 @pytest.mark.asyncio

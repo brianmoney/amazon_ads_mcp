@@ -955,6 +955,12 @@ def _query_search_term_report(
             "ad_group_id": str(row.get("ad_group_id", "")),
             "ad_group_name": None,
             "keyword_id": str(row.get("keyword_id") or ""),
+            "keyword_ids": (row.get("targeting_context_json") or {}).get(
+                "keyword_ids",
+                [str(row.get("keyword_id") or "")]
+                if row.get("keyword_id")
+                else [],
+            ),
             "search_term": row.get("search_term"),
             "match_type": row.get("match_type"),
             "impressions": parse_number(row.get("impressions")),

@@ -307,6 +307,7 @@ async def load_search_terms(
             "manually_targeted": row.get("manually_targeted"),
             "negated": row.get("negated"),
             "targeting_context_json": {
+                "keyword_ids": row.get("keyword_ids") or [],
                 "manual_target_ids": row.get("manual_target_ids") or [],
                 "negative_target_ids": row.get("negative_target_ids") or [],
                 "negative_match_types": row.get("negative_match_types") or [],

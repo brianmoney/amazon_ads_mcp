@@ -429,3 +429,19 @@ async def test_execute_report_surface_marks_create_failure_terminal(
             },
         )
     ]
+
+
+def test_report_surfaces_use_supported_budget_history_report_contract():
+    assert worker_module.REPORT_SURFACES["get_campaign_budget_history"] == {
+        "report_type_id": "spCampaigns",
+        "group_by": ["campaign"],
+        "columns": [
+            "campaignId",
+            "campaignName",
+            "date",
+            "cost",
+            "campaignBudgetAmount",
+        ],
+        "filters": [],
+        "time_unit": "DAILY",
+    }

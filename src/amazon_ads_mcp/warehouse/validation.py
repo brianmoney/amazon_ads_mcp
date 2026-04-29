@@ -148,6 +148,10 @@ async def validate_search_terms(
             "campaign_id": row.get("campaign_id"),
             "ad_group_id": row.get("ad_group_id"),
             "keyword_id": row.get("keyword_id") or "",
+            "keyword_ids": (row.get("targeting_context_json") or {}).get(
+                "keyword_ids",
+                [row.get("keyword_id")] if row.get("keyword_id") else [],
+            ),
             "search_term": row.get("search_term"),
             "match_type": row.get("match_type"),
             "impressions": row.get("impressions"),

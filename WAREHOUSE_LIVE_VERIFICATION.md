@@ -73,7 +73,7 @@ your rehearsal before you run them.
 
 ### 1. Confirm expected `ingestion_job` rows
 
-The rehearsal should create one completed or failed job row per in-scope
+The rehearsal should leave one deterministic `ingestion_job` row per in-scope
 surface:
 
 - `ads_profile`
@@ -143,7 +143,7 @@ WITH params AS (
     DATE '2026-04-27' AS window_start,
     DATE '2026-04-27' AS window_end
 )
-SELECT
+SELECT DISTINCT ON (rr.surface_name)
   rr.surface_name,
   rr.report_type_id,
   rr.status,
@@ -152,27 +152,41 @@ SELECT
   rr.amazon_report_id,
   rr.window_start,
   rr.window_end,
-  rr.error_text
+  rr.error_text,
+  rr.requested_at,
+  rr.last_polled_at,
+  rr.completed_at,
+  rr.retrieved_at
 FROM report_run AS rr
-JOIN ingestion_job AS ij
-  ON ij.ingestion_job_id = rr.ingestion_job_id
 WHERE rr.profile_id = (SELECT profile_id FROM params)
-  AND ij.region = (SELECT region FROM params)
-  AND ij.started_at >= (SELECT run_started_at FROM params)
   AND rr.window_start = (SELECT window_start FROM params)
   AND rr.window_end = (SELECT window_end FROM params)
-ORDER BY requested_at DESC, surface_name;
+  AND rr.surface_name IN (
+    'get_keyword_performance',
+    'get_search_term_report',
+    'get_campaign_budget_history',
+    'get_placement_report',
+    'get_impression_share_report'
+  )
+ORDER BY
+  rr.surface_name,
+  rr.requested_at DESC,
+  rr.last_polled_at DESC NULLS LAST,
+  rr.completed_at DESC NULLS LAST;
 ```
 
 Pass criteria:
 
-- One `report_run` exists for each report-backed surface in the rehearsal.
-- `status = 'completed'` for each row.
+- One scope-matching `report_run` is present for each report-backed surface.
+- The matching row may have been created in this rehearsal or resumed from a
+  prior attempt for the same profile and window.
+- `status = 'completed'` for each inspected row.
 - `amazon_report_id` is populated.
 - `window_start` and `window_end` match the expected lagged window.
 
-Fail the rehearsal if any `report_run` is left in `failed`, `queued`, or
-`processing`, or if it points at the wrong window.
+Fail the rehearsal if any inspected `report_run` has a non-`completed` status
+such as `queued`, `processing`, `failed`, or `cancelled`, or if it points at
+the wrong window.
 
 ### 3. Confirm phase 1 warehouse tables were populated
 

@@ -115,9 +115,16 @@ async def test_get_campaign_budget_history_returns_normalized_rows(monkeypatch):
         "Content-Type": "application/vnd.spCampaign.v3+json",
         "Accept": "application/vnd.spCampaign.v3+json",
     }
-    assert run_report.await_args.kwargs["report_type_id"] == "budgetUsage"
+    assert run_report.await_args.kwargs["report_type_id"] == "spCampaigns"
     assert run_report.await_args.kwargs["group_by"] == ["campaign"]
     assert run_report.await_args.kwargs["time_unit"] == "DAILY"
+    assert run_report.await_args.kwargs["columns"] == [
+        "campaignId",
+        "campaignName",
+        "date",
+        "cost",
+        "campaignBudgetAmount",
+    ]
 
 
 @pytest.mark.asyncio

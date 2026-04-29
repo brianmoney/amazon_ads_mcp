@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from .common import (
+    SP_NEGATIVE_TARGET_MEDIA_TYPE,
+    SP_TARGET_MEDIA_TYPE,
     clamp_limit,
     extract_items,
     get_sp_client,
@@ -12,6 +15,7 @@ from .common import (
     normalize_term,
     parse_number,
     require_sp_context,
+    sp_post,
 )
 from .report_helper import resume_sp_report, run_sp_report
 
@@ -55,9 +59,14 @@ async def _fetch_target_index(
 ) -> dict[str, list[dict[str, Any]]]:
     payload: dict[str, Any] = {"count": 100}
     if campaign_ids:
-        payload["campaignIdFilter"] = campaign_ids
+        payload["campaignIdFilter"] = {"include": campaign_ids}
 
-    response = await client.post(path, json=payload)
+    media_type = (
+        SP_TARGET_MEDIA_TYPE
+        if path == "/sp/targets/list"
+        else SP_NEGATIVE_TARGET_MEDIA_TYPE
+    )
+    response = await sp_post(client, path, payload, media_type)
     response.raise_for_status()
     items = extract_items(response.json(), "targets")
     if not items:
@@ -103,6 +112,90 @@ def _normalize_search_term_row(
             item.get("matchType") for item in negative_matches if item.get("matchType")
         ],
     }
+
+
+def _unique_strings(values: Iterable[Any]) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        ordered.append(text)
+    return ordered
+
+
+def _merge_search_term_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    aggregated: dict[tuple[str, str, str], dict[str, Any]] = {}
+    order: list[tuple[str, str, str]] = []
+    for row in rows:
+        key = (
+            str(row.get("campaign_id", "")).strip(),
+            str(row.get("ad_group_id", "")).strip(),
+            normalize_term(row.get("search_term")),
+        )
+        existing = aggregated.get(key)
+        if existing is None:
+            keyword_ids = _unique_strings([row.get("keyword_id")])
+            aggregated[key] = {
+                **row,
+                "keyword_ids": keyword_ids,
+                "keyword_id": keyword_ids[0] if len(keyword_ids) == 1 else "",
+                "manual_target_ids": _unique_strings(row.get("manual_target_ids") or []),
+                "negative_target_ids": _unique_strings(
+                    row.get("negative_target_ids") or []
+                ),
+                "negative_match_types": _unique_strings(
+                    row.get("negative_match_types") or []
+                ),
+            }
+            order.append(key)
+            continue
+
+        keyword_ids = _unique_strings(
+            [*(existing.get("keyword_ids") or []), row.get("keyword_id")]
+        )
+        existing["keyword_ids"] = keyword_ids
+        existing["keyword_id"] = keyword_ids[0] if len(keyword_ids) == 1 else ""
+
+        search_term = row.get("search_term")
+        if search_term and not existing.get("search_term"):
+            existing["search_term"] = search_term
+
+        match_type = row.get("match_type")
+        if match_type and not existing.get("match_type"):
+            existing["match_type"] = match_type
+        elif match_type and existing.get("match_type") != match_type:
+            existing["match_type"] = None
+
+        for metric in ("impressions", "clicks", "spend", "sales", "orders"):
+            existing[metric] = (existing.get(metric) or 0) + (row.get(metric) or 0)
+
+        existing["manually_targeted"] = bool(
+            existing.get("manually_targeted") or row.get("manually_targeted")
+        )
+        existing["negated"] = bool(existing.get("negated") or row.get("negated"))
+        existing["manual_target_ids"] = _unique_strings(
+            [
+                *(existing.get("manual_target_ids") or []),
+                *(row.get("manual_target_ids") or []),
+            ]
+        )
+        existing["negative_target_ids"] = _unique_strings(
+            [
+                *(existing.get("negative_target_ids") or []),
+                *(row.get("negative_target_ids") or []),
+            ]
+        )
+        existing["negative_match_types"] = _unique_strings(
+            [
+                *(existing.get("negative_match_types") or []),
+                *(row.get("negative_match_types") or []),
+            ]
+        )
+
+    return [aggregated[key] for key in order]
 
 
 async def get_search_term_report(
@@ -154,10 +247,12 @@ async def get_search_term_report(
     )
 
     bounded_limit = clamp_limit(limit, default=100)
-    rows = [
+    rows = _merge_search_term_rows(
+        [
         _normalize_search_term_row(row, manual_targets, negative_targets)
         for row in filtered_report_rows[:bounded_limit]
-    ]
+        ]
+    )
 
     return {
         "profile_id": profile_id,

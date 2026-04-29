@@ -170,9 +170,15 @@ REPORT_SURFACES = {
         "time_unit": "SUMMARY",
     },
     "get_campaign_budget_history": {
-        "report_type_id": "budgetUsage",
+        "report_type_id": "spCampaigns",
         "group_by": ["campaign"],
-        "columns": ["campaignId", "campaignName", "date", "cost", "dailyBudget", "hoursRan"],
+        "columns": [
+            "campaignId",
+            "campaignName",
+            "date",
+            "cost",
+            "campaignBudgetAmount",
+        ],
         "filters": [],
         "time_unit": "DAILY",
     },

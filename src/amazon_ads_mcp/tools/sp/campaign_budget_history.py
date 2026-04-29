@@ -31,8 +31,7 @@ BUDGET_HISTORY_REPORT_COLUMNS = [
     "campaignName",
     "date",
     "cost",
-    "dailyBudget",
-    "hoursRan",
+    "campaignBudgetAmount",
 ]
 _DATE_KEYS = ("date", "reportDate", "day")
 _CAMPAIGN_NAME_KEYS = ("campaignName", "name")
@@ -140,7 +139,7 @@ async def get_campaign_budget_history(
         report = await resume_sp_report(resume_from_report_id, client=client)
     else:
         report = await run_sp_report(
-            report_type_id="budgetUsage",
+            report_type_id="spCampaigns",
             start_date=start_date,
             end_date=end_date,
             group_by=["campaign"],

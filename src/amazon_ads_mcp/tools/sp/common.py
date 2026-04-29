@@ -14,6 +14,10 @@ MAX_LIST_LIMIT = 100
 SP_CAMPAIGN_MEDIA_TYPE = "application/vnd.spCampaign.v3+json"
 SP_AD_GROUP_MEDIA_TYPE = "application/vnd.spAdGroup.v3+json"
 SP_KEYWORD_MEDIA_TYPE = "application/vnd.spKeyword.v3+json"
+SP_TARGET_MEDIA_TYPE = "application/vnd.sptargetingClause.v3+json"
+SP_NEGATIVE_TARGET_MEDIA_TYPE = (
+    "application/vnd.spnegativeTargetingClause.v3+json"
+)
 
 
 class SPContextError(RuntimeError):
